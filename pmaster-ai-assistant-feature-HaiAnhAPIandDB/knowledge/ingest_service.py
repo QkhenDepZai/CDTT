@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
 import pymysql
@@ -53,6 +54,14 @@ FAQ_DOCUMENT_TITLE = "Bộ câu hỏi thường gặp (FAQ) Python Master 2026"
 # không bị tách rời); dài hơn mới cắt nhỏ.
 FAQ_SINGLE_CHUNK_MAX_CHARS = CHUNK_SIZE_CHARS * 3
 
+# Tài liệu kẹt ở 'processing' lâu hơn ngưỡng này (server tắt giữa chừng khi
+# đang embed) được coi là hỏng và cho phép xử lý lại khi upload lần nữa.
+STALE_PROCESSING_MINUTES = 30
+
+# Xử lý nền cho upload lớn (background=True). 2 luồng: đủ để không chặn
+# request khác, không vượt quota phút của Embedding API.
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-ingest")
+
 
 @dataclass
 class IngestResult:
@@ -60,6 +69,9 @@ class IngestResult:
     message: str
     document_id: int | None = None
     chunk_count: int = 0
+    # Chỉ có khi status='failed': validation (file/dữ liệu không hợp lệ) |
+    # embedding (Gemini Embedding lỗi/hết quota - thử lại sau) | system (lỗi DB/code).
+    reason: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -144,12 +156,13 @@ def _process(document_id: int, title: str, sections: list[DocumentSection] | Non
     except (DocumentLoadError, EmbeddingError) as exc:
         logger.warning("[Ingest] Tài liệu #%s thất bại: %s", document_id, exc)
         _mark_failed(document_id, str(exc))
-        return IngestResult("failed", str(exc), document_id)
+        reason = "embedding" if isinstance(exc, EmbeddingError) else "validation"
+        return IngestResult("failed", str(exc), document_id, reason=reason)
     except Exception as exc:  # noqa: BLE001 - mọi lỗi khác cũng phải về status failed
         logger.exception("[Ingest] Lỗi không mong đợi với tài liệu #%s", document_id)
         _mark_failed(document_id, f"Lỗi hệ thống: {type(exc).__name__}")
         return IngestResult("failed", "Lỗi hệ thống khi xử lý tài liệu, xem log server.",
-                            document_id)
+                            document_id, reason="system")
 
     _notify_index_changed()
     logger.info("[Ingest] Tài liệu #%s '%s' sẵn sàng: %s chunk.", document_id, title, count)
@@ -158,6 +171,18 @@ def _process(document_id: int, title: str, sections: list[DocumentSection] | Non
 
 
 # ---- API công khai -----------------------------------------------------------
+def _is_stale(document: dict) -> bool:
+    minutes = document.get("minutes_since_update")
+    return minutes is not None and minutes >= STALE_PROCESSING_MINUTES
+
+
+def _process_in_background(*args):
+    try:
+        _process(*args)
+    except Exception:  # noqa: BLE001 - _process đã tự xử lý lỗi; đây là lưới an toàn cuối
+        logger.exception("[Ingest] Lỗi luồng xử lý nền")
+
+
 def ingest_bytes(
     raw: bytes,
     filename: str,
@@ -166,27 +191,35 @@ def ingest_bytes(
     category: str | None = None,
     uploaded_by: int | None = None,
     embeddings: EmbeddingService | None = None,
+    background: bool = False,
 ) -> IngestResult:
-    """Nạp 1 tài liệu từ nội dung bytes (dùng cho API upload và CLI)."""
+    """Nạp 1 tài liệu từ nội dung bytes (dùng cho API upload và CLI).
+
+    background=True: kiểm tra & lưu metadata xong thì trả ngay status
+    'processing' (API trả 202), việc embed chạy ở luồng nền; client hỏi lại
+    trạng thái qua GET /api/knowledge/<id>. Dùng cho file lớn để request HTTP
+    không bị timeout.
+    """
     embeddings = embeddings or get_embedding_service()
 
     try:
         source_type = detect_source_type(filename)
     except DocumentLoadError as exc:
-        return IngestResult("failed", str(exc))
+        return IngestResult("failed", str(exc), reason="validation")
 
     max_bytes = KNOWLEDGE_MAX_FILE_MB * 1024 * 1024
     if not raw:
-        return IngestResult("failed", "File rỗng.")
+        return IngestResult("failed", "File rỗng.", reason="validation")
     if len(raw) > max_bytes:
-        return IngestResult("failed", f"File vượt quá giới hạn {KNOWLEDGE_MAX_FILE_MB} MB.")
+        return IngestResult("failed", f"File vượt quá giới hạn {KNOWLEDGE_MAX_FILE_MB} MB.",
+                            reason="validation")
 
     # Trích xuất text TRƯỚC khi ghi DB: file hỏng bị từ chối ngay, không để
     # lại bản ghi rác trong knowledge_metadata.
     try:
         sections = load_document_bytes(raw, filename)
     except DocumentLoadError as exc:
-        return IngestResult("failed", str(exc))
+        return IngestResult("failed", str(exc), reason="validation")
 
     content_hash = sha256_bytes(raw)
     title = (title or os.path.splitext(os.path.basename(filename))[0]).strip()[:255]
@@ -201,7 +234,7 @@ def ingest_bytes(
                     f"Tài liệu đã tồn tại (#{existing['id']} - {existing['title']}).",
                     existing["id"], existing["chunk_count"],
                 )
-            if existing and existing["status"] == "processing":
+            if existing and existing["status"] == "processing" and not _is_stale(existing):
                 return IngestResult("processing", "Tài liệu này đang được xử lý.",
                                     existing["id"])
 
@@ -231,10 +264,15 @@ def ingest_bytes(
     except Exception as exc:  # noqa: BLE001
         connection.rollback()
         logger.exception("[Ingest] Lỗi DB khi tạo metadata cho '%s'", filename)
-        return IngestResult("failed", f"Lỗi cơ sở dữ liệu: {type(exc).__name__}")
+        return IngestResult("failed", f"Lỗi cơ sở dữ liệu: {type(exc).__name__}", reason="system")
     finally:
         connection.close()
 
+    if background:
+        _executor.submit(_process_in_background, document_id, title, sections, None,
+                         embeddings, "created")
+        return IngestResult("processing", "Đã nhận tài liệu, đang lập chỉ mục ở chế độ nền.",
+                            document_id)
     return _process(document_id, title, sections, None, embeddings, "created")
 
 
@@ -243,7 +281,7 @@ def ingest_file(path: str, **kwargs) -> IngestResult:
         with open(path, "rb") as handle:
             raw = handle.read()
     except OSError as exc:
-        return IngestResult("failed", f"Không đọc được file '{path}': {exc}")
+        return IngestResult("failed", f"Không đọc được file '{path}': {exc}", reason="validation")
     return ingest_bytes(raw, os.path.basename(path), **kwargs)
 
 
@@ -286,7 +324,8 @@ def sync_faqs(force: bool = False, embeddings: EmbeddingService | None = None) -
         with connection.cursor() as cursor:
             faqs = repository.fetch_active_faqs(cursor)
             if not faqs:
-                return IngestResult("failed", "Bảng faqs chưa có dữ liệu (chạy import_faqs.py trước).")
+                return IngestResult("failed", "Bảng faqs chưa có dữ liệu (chạy import_faqs.py trước).",
+                                    reason="validation")
 
             chunks = _build_faq_chunks(faqs)
             digest_source = "\n\x1e".join(chunk.content for chunk in chunks)
@@ -316,7 +355,7 @@ def sync_faqs(force: bool = False, embeddings: EmbeddingService | None = None) -
     except Exception as exc:  # noqa: BLE001
         connection.rollback()
         logger.exception("[Ingest] Lỗi DB khi đồng bộ FAQ")
-        return IngestResult("failed", f"Lỗi cơ sở dữ liệu: {type(exc).__name__}")
+        return IngestResult("failed", f"Lỗi cơ sở dữ liệu: {type(exc).__name__}", reason="system")
     finally:
         connection.close()
 
@@ -335,7 +374,8 @@ def reindex_document(document_id: int, embeddings: EmbeddingService | None = Non
         connection.close()
 
     if not document:
-        return IngestResult("failed", f"Không tìm thấy tài liệu #{document_id}.")
+        return IngestResult("failed", f"Không tìm thấy tài liệu #{document_id}.",
+                            reason="not_found")
     if document["source_type"] == "faq":
         return sync_faqs(force=True, embeddings=embeddings)
 
@@ -346,7 +386,8 @@ def reindex_document(document_id: int, embeddings: EmbeddingService | None = Non
         sections = load_document_bytes(raw, document["original_filename"] or path)
     except (OSError, DocumentLoadError) as exc:
         _mark_failed(document_id, str(exc))
-        return IngestResult("failed", f"Không đọc lại được file gốc: {exc}", document_id)
+        return IngestResult("failed", f"Không đọc lại được file gốc: {exc}", document_id,
+                            reason="validation")
 
     connection = get_db_connection()
     try:

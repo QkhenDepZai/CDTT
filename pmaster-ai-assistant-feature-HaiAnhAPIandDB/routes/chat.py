@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, request, jsonify
 
 from database import (
@@ -20,6 +22,9 @@ from faq_matcher import find_best_faq_match
 from moderation import check_violation
 from image_handler import validate_image, save_image, build_image_url, prepare_image_for_gemini
 from security import (
+    get_request_user_token,
+    issue_user_token,
+    verify_user_token,
     detect_prompt_injection,
     PROMPT_INJECTION_MESSAGE,
     detect_internal_data_request,
@@ -27,8 +32,48 @@ from security import (
 )
 from conversation_memory import build_history_for_gemini
 from rag_service import ImageInput, get_rag_service
+from config import ENFORCE_USER_TOKEN
 
 chat_bp = Blueprint('chat', __name__)
+
+
+def _request_user_id():
+    if request.is_json:
+        return (request.get_json(silent=True) or {}).get("user_id")
+    return request.form.get("user_id")
+
+
+@chat_bp.before_request
+def _enforce_user_token():
+    """ENFORCE_USER_TOKEN=true: ai gửi user_id có sẵn phải kèm đúng user_token,
+    tránh ghi tin nhắn/đọc phản hồi trong phiên của người khác."""
+    if not ENFORCE_USER_TOKEN or request.method == "OPTIONS":
+        return None
+    user_id = _request_user_id()
+    if user_id in (None, ""):
+        return None  # người dùng mới -> hệ thống tự tạo user và cấp token
+    try:
+        valid = verify_user_token(int(user_id), get_request_user_token())
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        return jsonify({"error": "user_token không hợp lệ cho user_id này."}), 401
+    return None
+
+
+@chat_bp.after_request
+def _attach_user_token(response):
+    """Gắn user_token vào mọi response thành công có user_id, để client lưu lại
+    và dùng cho GET /api/history/<user_id> (và các lần chat sau)."""
+    if response.status_code != 200 or not response.is_json:
+        return response
+    body = response.get_json(silent=True)
+    if isinstance(body, dict) and body.get("user_id") and "user_token" not in body:
+        token = issue_user_token(body["user_id"])
+        if token:
+            body["user_token"] = token
+            response.set_data(json.dumps(body, ensure_ascii=False, default=str))
+    return response
 
 GREETING_TEXT = (
     "Chào bạn! Mình là trợ lý ảo của Python Master 2026. "
@@ -112,6 +157,10 @@ def chat_init():
 # ============================================================
 @chat_bp.route('/api/chat/history/<int:user_id>', methods=['GET'])
 def chat_history(user_id):
+    # Trước đây endpoint này trả danh sách phiên chat cho BẤT KỲ ai biết
+    # user_id (dò số tăng dần là xem được của người khác - vi phạm D1-13).
+    if not verify_user_token(user_id, get_request_user_token()):
+        return jsonify({"error": "Không có quyền xem lịch sử này (thiếu hoặc sai user_token)."}), 403
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:

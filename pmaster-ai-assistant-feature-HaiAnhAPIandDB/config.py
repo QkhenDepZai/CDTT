@@ -153,3 +153,23 @@ RAG_FOLLOWUP_MAX_WORDS = int(os.getenv('RAG_FOLLOWUP_MAX_WORDS', '8'))
 # ============================================================
 APP_HOST = os.getenv('APP_HOST', '0.0.0.0')
 APP_PORT = int(os.getenv('APP_PORT', '5000'))
+
+# ============================================================
+# MODULE BẢO MẬT API (Giai đoạn 3)
+# ============================================================
+# Khoá bí mật ký user_token (HMAC-SHA256). user_token chứng minh người gọi
+# đúng là chủ của user_id -> chặn xem trộm lịch sử chat của người khác
+# (D1-13). Tạo chuỗi ngẫu nhiên:  python -c "import secrets; print(secrets.token_urlsafe(48))"
+# Đổi khoá => mọi user_token cũ mất hiệu lực.
+APP_SECRET_KEY = os.getenv('APP_SECRET_KEY', '')
+
+# Khoá cho API quản trị Knowledge Base (/api/knowledge/*), gửi qua header
+# X-Admin-Key. Để trống => các API quản trị bị khoá hoàn toàn (fail-closed).
+ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
+
+# true => /api/chat* bắt buộc gửi user_token hợp lệ khi truyền user_id có sẵn
+# (chống ghi tin nhắn vào phiên của người khác). Mặc định false để widget cũ
+# chưa gửi token vẫn chạy; nên bật khi frontend đã lưu user_token.
+ENFORCE_USER_TOKEN = os.getenv('ENFORCE_USER_TOKEN', 'false').lower() in ('1', 'true', 'yes')
+
+HISTORY_MAX_PAGE_SIZE = int(os.getenv('HISTORY_MAX_PAGE_SIZE', '100'))

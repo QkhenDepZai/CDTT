@@ -274,3 +274,37 @@ def ping_database():
         return False, f"{type(exc).__name__}: {exc}"
     finally:
         connection.close()
+
+
+def list_user_messages(cursor, user_id, conversation_id=None, before_id=None, limit=50):
+    """Lịch sử chat của 1 user từ VIEW chat_history (sql/01_init_schema.sql).
+
+    Phân trang kiểu keyset (before_id) thay vì OFFSET: ổn định khi đang có tin
+    nhắn mới chèn vào và không chậm dần khi lịch sử dài. Trả về tin nhắn MỚI
+    NHẤT trước. Không trả retrieved_chunk_ids (dữ liệu nội bộ).
+    """
+    conditions = ["user_id = %s"]
+    params = [user_id]
+    if conversation_id:
+        conditions.append("conversation_id = %s")
+        params.append(conversation_id)
+    if before_id:
+        conditions.append("message_id < %s")
+        params.append(before_id)
+    params.append(limit)
+    cursor.execute(
+        "SELECT message_id, conversation_id, channel, sender_type, content, image_url, "
+        "answer_status, created_at FROM chat_history "
+        f"WHERE {' AND '.join(conditions)} ORDER BY message_id DESC LIMIT %s",
+        tuple(params),
+    )
+    return cursor.fetchall()
+
+
+def get_user_conversation(cursor, user_id, conversation_id):
+    cursor.execute(
+        "SELECT id, title, channel, status, created_at, closed_at FROM conversations "
+        "WHERE id = %s AND user_id = %s",
+        (conversation_id, user_id),
+    )
+    return cursor.fetchone()

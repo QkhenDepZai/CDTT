@@ -28,8 +28,11 @@ MAX_ERROR_MESSAGE_LEN = 1000
 
 # ---- knowledge_metadata -----------------------------------------------------
 def find_document_by_hash(cursor, content_hash: str):
+    # minutes_since_update tính ngay trong MySQL (cùng múi giờ với updated_at),
+    # dùng để phát hiện bản ghi kẹt ở 'processing'.
     cursor.execute(
-        f"SELECT {DOCUMENT_COLUMNS} FROM knowledge_metadata WHERE content_hash = %s",
+        f"SELECT {DOCUMENT_COLUMNS}, TIMESTAMPDIFF(MINUTE, updated_at, NOW()) "
+        "AS minutes_since_update FROM knowledge_metadata WHERE content_hash = %s",
         (content_hash,),
     )
     return cursor.fetchone()

@@ -19,6 +19,8 @@ if PROJECT_ROOT not in sys.path:
 # Key giả chỉ để import được; mọi lệnh gọi Gemini trong test đều bị thay bằng
 # bản giả lập, không có request nào đi ra Internet.
 os.environ.setdefault("GEMINI_API_KEY", "test-key-khong-dung-that")
+os.environ.setdefault("APP_SECRET_KEY", "test-secret-" + "x" * 40)
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-123456")
 
 # Phải đặt TRƯỚC khi config.py được import lần đầu (config đọc env lúc import).
 if os.getenv("PM_TEST_MYSQL") == "1":

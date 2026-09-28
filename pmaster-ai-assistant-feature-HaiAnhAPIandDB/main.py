@@ -21,7 +21,15 @@ Mỗi worker tự nạp chỉ mục KB và tự làm mới khi KB thay đổi
 import logging
 import sys
 
-from config import APP_HOST, APP_PORT, DB_CONFIG, GEMINI_API_KEY
+from config import (
+    ADMIN_API_KEY,
+    APP_HOST,
+    APP_PORT,
+    APP_SECRET_KEY,
+    DB_CONFIG,
+    ENFORCE_USER_TOKEN,
+    GEMINI_API_KEY,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +46,19 @@ def check_config() -> list[str]:
     if DB_CONFIG.get("password") is None:
         problems.append("Thiếu DB_PASSWORD trong .env (để trống giá trị nếu MySQL không đặt mật khẩu).")
     return problems
+
+
+def warn_optional_config():
+    """Thiếu các khoá này KHÔNG chặn chatbot, nhưng tắt tính năng liên quan."""
+    if len(APP_SECRET_KEY) < 32:
+        logger.warning("APP_SECRET_KEY chưa đặt hoặc < 32 ký tự: không cấp được user_token, "
+                       "API /api/history/* sẽ từ chối mọi yêu cầu.")
+        if ENFORCE_USER_TOKEN:
+            logger.warning("ENFORCE_USER_TOKEN=true nhưng thiếu APP_SECRET_KEY: người dùng cũ "
+                           "sẽ không chat tiếp được trong phiên có sẵn.")
+    if len(ADMIN_API_KEY) < 16:
+        logger.warning("ADMIN_API_KEY chưa đặt hoặc < 16 ký tự: API quản trị /api/knowledge/* "
+                       "đang bị khoá (chỉ quản trị được qua manage_knowledge.py).")
 
 
 def warm_up_knowledge_base():
@@ -65,6 +86,7 @@ def main() -> int:
             logger.error("Cấu hình: %s", problem)
         logger.error("Sao chép .env.example thành .env và điền đủ giá trị rồi chạy lại.")
         return 1
+    warn_optional_config()
 
     from database import ping_database
     db_ok, db_error = ping_database()

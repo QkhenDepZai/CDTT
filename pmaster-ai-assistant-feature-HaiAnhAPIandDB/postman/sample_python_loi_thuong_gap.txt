@@ -1,0 +1,17 @@
+TÀI LIỆU MẪU ĐỂ KIỂM THỬ UPLOAD KNOWLEDGE BASE
+(Kiến thức Python chung - không phải thể lệ chính thức của cuộc thi)
+
+1. IndentationError: expected an indented block
+Python dùng thụt lề để xác định khối lệnh. Sau các câu lệnh kết thúc bằng dấu hai chấm (if, for, while, def, class) phải có ít nhất một dòng thụt vào 4 dấu cách. Không trộn lẫn phím Tab và dấu cách trong cùng một file.
+
+2. NameError: name 'x' is not defined
+Biến hoặc hàm được dùng trước khi khai báo, hoặc gõ sai tên (Python phân biệt chữ hoa, chữ thường). Kiểm tra chính tả và thứ tự khai báo.
+
+3. TypeError: can only concatenate str (not "int") to str
+Không thể cộng trực tiếp chuỗi với số. Chuyển số sang chuỗi bằng str(), hoặc dùng f-string: f"Điểm: {diem}".
+
+4. ValueError: invalid literal for int() with base 10
+Hàm int() nhận chuỗi không phải số, thường gặp khi đọc input() có khoảng trắng hoặc để trống. Dùng input().strip() và kiểm tra trước khi chuyển kiểu.
+
+5. IndexError: list index out of range
+Truy cập phần tử vượt quá độ dài danh sách. Chỉ số hợp lệ của danh sách n phần tử là từ 0 đến n - 1.
