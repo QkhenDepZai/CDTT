@@ -16,8 +16,7 @@ from database import (
     create_agent_notification,
     list_user_conversations,
 )
-from faq_matcher import find_best_faq_match, find_faq_candidates
-from gemini_client import create_chat, send_message_with_retry, send_message_with_image_retry
+from faq_matcher import find_best_faq_match
 from moderation import check_violation
 from image_handler import validate_image, save_image, build_image_url, prepare_image_for_gemini
 from security import (
@@ -27,7 +26,7 @@ from security import (
     INTERNAL_DATA_REQUEST_MESSAGE,
 )
 from conversation_memory import build_history_for_gemini
-from config import RAG_TOP_K, RAG_MAX_CHARS_PER_FIELD
+from rag_service import ImageInput, get_rag_service
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -37,44 +36,14 @@ GREETING_TEXT = (
 )
 
 
-def _truncate(text, max_chars):
-    text = (text or "").strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rstrip() + "…"
-
-
-def _build_retrieval_context(candidates):
-    """Đóng gói top FAQ liên quan làm retrieval context cho Gemini.
-
-    Tối ưu token (mục 4 yêu cầu):
-    - Khử trùng lặp theo id FAQ (candidates đôi khi có thể trùng nếu nhánh
-      full-text search không trả kết quả và fallback lấy toàn bộ FAQ).
-    - Cắt bớt mỗi field theo RAG_MAX_CHARS_PER_FIELD (config.py) để 1 FAQ có
-      phần "xử lý tình huống" quá dài không chiếm hết ngân sách token của cả
-      retrieval context.
-    - Số lượng chunk đã được giới hạn từ trước bởi RAG_TOP_K khi gọi
-      find_faq_candidates(limit=RAG_TOP_K) ở nơi gọi hàm này.
-    """
-    if not candidates:
-        return None
-
-    chunks = []
-    seen_ids = set()
-    for row in candidates:
-        faq_id = row.get("id")
-        if faq_id is not None and faq_id in seen_ids:
-            continue
-        seen_ids.add(faq_id)
-
-        index = len(chunks) + 1
-        chunks.append(
-            f"FAQ {index}: Intent={_truncate(row.get('intent'), RAG_MAX_CHARS_PER_FIELD)}\n"
-            f"Câu hỏi mẫu={_truncate(row.get('cau_hoi_mau'), RAG_MAX_CHARS_PER_FIELD)}\n"
-            f"Xử lý={_truncate(row.get('xu_ly_tinh_huong'), RAG_MAX_CHARS_PER_FIELD)}\n"
-            f"Trả lời chuẩn={_truncate(row.get('tra_loi_chuan'), RAG_MAX_CHARS_PER_FIELD)}"
-        )
-    return "\n\n".join(chunks) if chunks else None
+def _save_rag_reply(cursor, connection, conversation_id, answer):
+    """Lưu câu trả lời AI kèm dữ liệu truy vết RAG (chunk đã dùng, độ trễ)."""
+    save_message(
+        cursor, connection, conversation_id, 'model', answer.reply,
+        answer_status=answer.status,
+        retrieved_chunk_ids=answer.chunk_ids,
+        latency_ms=answer.latency_ms,
+    )
 
 
 def _apply_ai_result(cursor, connection, conversation_id, model_reply, kind, response_payload):
@@ -347,7 +316,8 @@ def chat_endpoint():
             if faq_row:
                 model_reply = faq_row['tra_loi_chuan']
                 reset_fail_count(cursor, connection, conversation_id)
-                save_message(cursor, connection, conversation_id, 'model', model_reply)
+                save_message(cursor, connection, conversation_id, 'model', model_reply,
+                             answer_status='faq')
                 return jsonify({
                     "status": "success",
                     "user_id": user_id,
@@ -356,23 +326,25 @@ def chat_endpoint():
                     "used_faq": True,
                 })
 
-            # 6. Không có FAQ khớp đủ ngưỡng -> retrieval top FAQ rồi mới hỏi Gemini
+            # 6. Không có FAQ khớp trực tiếp -> RAG: truy vấn Knowledge Base
+            #    (tài liệu + FAQ đã embed) rồi ghép ngữ cảnh cho Gemini trả lời.
             db_messages = get_conversation_messages(cursor, conversation_id)
             history = build_history_for_gemini(cursor, connection, conversation_id, db_messages)
-            candidates = find_faq_candidates(cursor, user_message, limit=RAG_TOP_K)
-            retrieval_context = _build_retrieval_context(candidates)
-            chat = create_chat(history, retrieval_context=retrieval_context)
-            model_reply, kind = send_message_with_retry(chat, user_message)
-            save_message(cursor, connection, conversation_id, 'model', model_reply)
+            answer = get_rag_service().answer(user_message, history, cursor=cursor)
+            _save_rag_reply(cursor, connection, conversation_id, answer)
 
             response_payload = {
                 "status": "success",
                 "user_id": user_id,
                 "conversation_id": conversation_id,
-                "reply": model_reply,
+                "reply": answer.reply,
                 "used_faq": False,
+                "answer_status": answer.status,
+                "sources": answer.sources_payload(),
+                "latency_ms": answer.latency_ms,
             }
-            _apply_ai_result(cursor, connection, conversation_id, model_reply, kind, response_payload)
+            _apply_ai_result(cursor, connection, conversation_id, answer.reply, answer.status,
+                             response_payload)
 
             return jsonify(response_payload)
 
@@ -496,29 +468,32 @@ def chat_image_endpoint():
                          image_url=image_url)
 
             # Ảnh gửi tới Gemini để phân tích; FAQ matcher chỉ áp dụng cho text.
-            # vì FAQ matcher chỉ so khớp câu hỏi dạng text mẫu, không xử lý được ảnh)
+            # Nếu có kèm câu hỏi, rag_service vẫn truy vấn KB theo phần text.
             db_messages = get_conversation_messages(cursor, conversation_id)
             history = build_history_for_gemini(cursor, connection, conversation_id, db_messages)
-            chat = create_chat(history)
             # Resize ảnh trước khi gửi Gemini để giảm token/latency (mục 9 yêu cầu):
             # ảnh chụp màn hình/điện thoại có thể vượt xa độ phân giải model cần.
             resized_bytes, resized_mime = prepare_image_for_gemini(
                 image_data["bytes"], image_data["mime_type"]
             )
-            model_reply, kind = send_message_with_image_retry(
-                chat, user_message, resized_bytes, resized_mime
+            answer = get_rag_service().answer(
+                user_message, history, image=ImageInput(resized_bytes, resized_mime), cursor=cursor,
             )
-            save_message(cursor, connection, conversation_id, 'model', model_reply)
+            _save_rag_reply(cursor, connection, conversation_id, answer)
 
             response_payload = {
                 "status": "success",
                 "user_id": user_id,
                 "conversation_id": conversation_id,
-                "reply": model_reply,
+                "reply": answer.reply,
                 "image_url": image_url,
                 "used_faq": False,
+                "answer_status": answer.status,
+                "sources": answer.sources_payload(),
+                "latency_ms": answer.latency_ms,
             }
-            _apply_ai_result(cursor, connection, conversation_id, model_reply, kind, response_payload)
+            _apply_ai_result(cursor, connection, conversation_id, answer.reply, answer.status,
+                             response_payload)
 
             return jsonify(response_payload)
 

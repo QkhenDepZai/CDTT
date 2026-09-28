@@ -5,73 +5,15 @@ file -> loader -> chunker -> embedding (giả lập) -> MySQL -> vector index ->
 Chạy:  PM_TEST_MYSQL=1 DB_HOST=127.0.0.1 DB_USER=root DB_PASSWORD=... pytest tests -v
 Test tự tạo/xoá database riêng (PM_TEST_DB_NAME, mặc định gemini_chat_db_test).
 """
-import hashlib
 import os
-import re
 
-import numpy as np
 import pytest
+
+from tests.fakes import FakeEmbeddingService
 
 pytestmark = pytest.mark.skipif(
     os.getenv("PM_TEST_MYSQL") != "1", reason="Đặt PM_TEST_MYSQL=1 để chạy test với MySQL"
 )
-
-SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql", "01_init_schema.sql")
-
-
-class FakeEmbeddingService:
-    """Embedding giả lập tất định: bag-of-words băm vào 768 chiều.
-    Câu hỏi có nhiều từ chung với chunk -> cosine cao, đủ để kiểm chứng luồng
-    truy vấn mà không tốn quota Gemini."""
-
-    model = "fake-embedding"
-    dimension = 768
-
-    def __init__(self, fail_queries=False):
-        self.fail_queries = fail_queries
-        self.document_calls = 0
-
-    def _vector(self, text):
-        vector = np.zeros(self.dimension, dtype=np.float32)
-        for word in re.findall(r"\w+", text.lower()):
-            vector[int(hashlib.md5(word.encode()).hexdigest(), 16) % self.dimension] += 1.0
-        norm = np.linalg.norm(vector)
-        return vector / norm if norm else vector
-
-    def embed_documents(self, texts, title=None):
-        self.document_calls += 1
-        return np.vstack([self._vector(text) for text in texts])
-
-    def embed_query(self, text):
-        from knowledge.embedding_service import EmbeddingError
-        if self.fail_queries:
-            raise EmbeddingError("quota exceeded", 429)
-        return self._vector(text)
-
-
-@pytest.fixture(scope="module")
-def test_db():
-    import pymysql
-    from config import DB_CONFIG
-
-    db_name = DB_CONFIG["database"]
-    assert db_name.endswith("_test"), "Chỉ chạy integration test trên database *_test"
-
-    with open(SCHEMA_PATH, encoding="utf-8") as handle:
-        script = handle.read().replace("gemini_chat_db", db_name)
-    script = "\n".join(line for line in script.splitlines() if not line.strip().startswith("--"))
-
-    admin = pymysql.connect(host=DB_CONFIG["host"], user=DB_CONFIG["user"],
-                            password=DB_CONFIG["password"], autocommit=True)
-    with admin.cursor() as cursor:
-        cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
-        for statement in script.split(";"):
-            if statement.strip():
-                cursor.execute(statement)
-    yield db_name
-    with admin.cursor() as cursor:
-        cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
-    admin.close()
 
 
 @pytest.fixture()

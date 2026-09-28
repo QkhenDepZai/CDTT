@@ -137,3 +137,19 @@ RAG_INDEX_REFRESH_SECONDS = int(os.getenv('RAG_INDEX_REFRESH_SECONDS', '30'))
 
 KNOWLEDGE_UPLOAD_FOLDER = os.getenv('KNOWLEDGE_UPLOAD_FOLDER', 'uploads/knowledge')
 KNOWLEDGE_MAX_FILE_MB = int(os.getenv('KNOWLEDGE_MAX_FILE_MB', '20'))
+
+# Tổng ngân sách ký tự của toàn bộ RETRIEVED DATA ghép vào system prompt
+# (~4000 ký tự tiếng Việt ~ 1.100 token). Chunk vượt ngân sách bị bỏ, ưu tiên
+# giữ các chunk điểm cao nhất -> prompt không phình to khi tăng RAG_TOP_K.
+RAG_MAX_CONTEXT_CHARS = int(os.getenv('RAG_MAX_CONTEXT_CHARS', '4000'))
+
+# Câu hỏi ngắn hơn ngưỡng (số từ) được ghép thêm câu hỏi trước đó của người
+# dùng khi truy vấn KB, để câu nối tiếp kiểu "Còn Bảng B thì sao?" vẫn tìm
+# đúng tài liệu (xem rag_service._build_retrieval_query).
+RAG_FOLLOWUP_MAX_WORDS = int(os.getenv('RAG_FOLLOWUP_MAX_WORDS', '8'))
+
+# ============================================================
+# MODULE SERVER (main.py)
+# ============================================================
+APP_HOST = os.getenv('APP_HOST', '0.0.0.0')
+APP_PORT = int(os.getenv('APP_PORT', '5000'))

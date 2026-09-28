@@ -5,6 +5,7 @@ from cors import handle_cors_and_site_key, add_cors_headers
 from routes.chat import chat_bp
 from routes.staff import staff_bp
 from routes.uploads import uploads_bp
+from routes.health import health_bp
 from config import MAX_IMAGE_SIZE_MB
 
 # Log rõ ràng ra terminal (model, attempt, status_code, error_type...) thay vì
@@ -28,6 +29,7 @@ app.after_request(add_cors_headers)
 app.register_blueprint(chat_bp)
 app.register_blueprint(staff_bp)
 app.register_blueprint(uploads_bp)
+app.register_blueprint(health_bp)
 
 
 @app.errorhandler(413)

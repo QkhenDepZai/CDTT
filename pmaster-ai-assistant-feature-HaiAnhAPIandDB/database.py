@@ -1,7 +1,16 @@
+import json
+import logging
+
 import pymysql
 from config import DB_CONFIG
 
+logger = logging.getLogger("pmaster.database")
+
 FAIL_COUNT_ESCALATE_THRESHOLD = 3
+
+# MySQL error 1054 "Unknown column" - dùng để nhận biết DB chưa chạy migration v2.
+ER_BAD_FIELD_ERROR = 1054
+_messages_has_rag_columns = True
 
 
 def get_db_connection():
@@ -128,7 +137,33 @@ def list_waiting_conversations(cursor):
     return cursor.fetchall()
 
 
-def save_message(cursor, connection, conversation_id, sender_type, content, image_url=None):
+def save_message(cursor, connection, conversation_id, sender_type, content, image_url=None,
+                 answer_status=None, retrieved_chunk_ids=None, latency_ms=None):
+    """Lưu 1 tin nhắn. 3 tham số cuối (cột thêm ở sql/02_migration_v1_to_v2.sql)
+    dùng để truy vết RAG/hallucination (D1-10) và thống kê (D1-12)."""
+    global _messages_has_rag_columns
+    if _messages_has_rag_columns and (
+        answer_status is not None or retrieved_chunk_ids is not None or latency_ms is not None
+    ):
+        try:
+            cursor.execute(
+                "INSERT INTO messages (conversation_id, sender_type, content, image_url, "
+                "answer_status, retrieved_chunk_ids, latency_ms) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (conversation_id, sender_type, content or "", image_url, answer_status,
+                 json.dumps(retrieved_chunk_ids) if retrieved_chunk_ids is not None else None,
+                 latency_ms)
+            )
+            connection.commit()
+            return
+        except pymysql.err.OperationalError as exc:
+            if exc.args and exc.args[0] == ER_BAD_FIELD_ERROR:
+                # DB chưa chạy migration v2 -> tắt ghi cột mới, không làm hỏng luồng chat.
+                _messages_has_rag_columns = False
+                logger.warning("Bảng messages chưa có cột RAG, hãy chạy "
+                               "sql/02_migration_v1_to_v2.sql. Tạm lưu tin nhắn dạng cũ.")
+            else:
+                raise
     cursor.execute(
         "INSERT INTO messages (conversation_id, sender_type, content, image_url) "
         "VALUES (%s, %s, %s, %s)",
@@ -223,3 +258,19 @@ def get_faq_by_id(cursor, faq_id):
         (faq_id,)
     )
     return cursor.fetchone()
+
+
+def ping_database():
+    """Kiểm tra kết nối MySQL. Trả về (ok: bool, error: str | None)."""
+    try:
+        connection = get_db_connection()
+    except pymysql.MySQLError as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return True, None
+    except pymysql.MySQLError as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        connection.close()
