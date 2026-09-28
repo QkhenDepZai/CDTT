@@ -1,0 +1,8 @@
+Flask
+pymysql
+python-dotenv
+google-genai>=1.50.0
+Pillow
+pandas
+openpyxl
+sqlalchemy

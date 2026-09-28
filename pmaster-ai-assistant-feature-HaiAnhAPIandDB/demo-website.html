@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Website Demo - Test Chatbot</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #fafaf8;
+    color: #1a1a1a;
+  }
+  header {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e5e0;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .logo { font-weight: 600; font-size: 18px; }
+  nav a { margin-left: 24px; color: #444; text-decoration: none; font-size: 14px; }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 64px 24px;
+  }
+  h1 { font-size: 28px; margin-bottom: 8px; }
+  p.lead { color: #555; font-size: 16px; line-height: 1.6; }
+  .card {
+    background: #fff;
+    border: 1px solid #e5e5e0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 32px;
+  }
+  .card h3 { margin-top: 0; font-size: 15px; }
+  .badge {
+    display: inline-block;
+    background: #eef2f0;
+    color: #1d7a6e;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Công ty Ví Dụ ABC</div>
+  <nav>
+    <a href="#">Trang chủ</a>
+    <a href="#">Sản phẩm</a>
+    <a href="#">Liên hệ</a>
+  </nav>
+</header>
+
+<main>
+  <div class="badge">Trang demo — không phải sản phẩm thật</div>
+  <h1>Đây là website "khách hàng" giả lập</h1>
+  <p class="lead">
+    Trang này chỉ để test xem chatbot có nhúng và hoạt động đúng khi đặt vào
+    một website hoàn toàn khác (khác domain với backend) hay không. Nội dung
+    trên trang không quan trọng — mục tiêu là bấm vào nút chat ở góc phải
+    dưới màn hình và kiểm tra toàn bộ luồng: giao diện → gửi API → backend
+    Flask → Gemini → trả lời ngược lại.
+  </p>
+
+  <div class="card">
+    <h3>Checklist khi test</h3>
+    <p>Mở DevTools (F12) → tab Console và Network trước khi bấm chat, để theo dõi:</p>
+    <ul>
+      <li>Có lỗi CORS trong Console không?</li>
+      <li>Request POST tới /api/chat có gửi đi không, status code là gì?</li>
+      <li>Response trả về có đúng field <code>reply</code>, <code>conversation_id</code> không?</li>
+      <li>Gửi 2-3 câu hỏi liên tiếp — bot có nhớ ngữ cảnh câu trước không?</li>
+    </ul>
+  </div>
+</main>
+
+<!--
+  ===================================================================
+  ĐOẠN NHÚNG CHATBOT — đây chính là dòng mà khách hàng thật sẽ dán
+  vào website của họ. Sửa data-site-key thành mã demo trước khi test.
+  ===================================================================
+-->
+<script 
+  src="https://pmaster-chatbot.duckdns.org/widget.js" 
+  data-site-key="site_demo_001">
+</script>
+
+</body>
+</html>
