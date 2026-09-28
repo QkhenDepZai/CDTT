@@ -187,6 +187,12 @@ def process_event(adapter: ChannelAdapter, event: IncomingMessage) -> str | None
         connection.close()
 
     reply = payload["reply"]
+    if payload.get("suggestions"):
+        # Câu hỏi làm rõ (D1-06): Messenger hiển thị lựa chọn dạng nút bấm; bấm
+        # nút gửi lại đúng chữ trên nút -> lượt sau tự ghép với câu hỏi gốc.
+        options = [QuickReply(option, "CLARIFY") for option in payload["suggestions"]]
+        _send(adapter, recipient, payload["clarification_question"], options)
+        return reply
     # Gợi ý nút "Gặp tư vấn viên" khi AI không trả lời được (D1-09).
     unanswered = payload.get("answer_status") in ("cannot_answer", "out_of_scope")
     buttons = [AGENT_BUTTON] if unanswered and not payload.get("escalated") else None

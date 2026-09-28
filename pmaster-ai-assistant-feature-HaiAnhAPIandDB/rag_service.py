@@ -200,18 +200,23 @@ class RagService:
         return send_message_with_retry(chat, question, max_retries=max_retries)
 
     def answer(self, question: str, history: list[dict] | None = None,
-               image: ImageInput | None = None, cursor=None) -> RagAnswer:
+               image: ImageInput | None = None, cursor=None,
+               retrieval_query: str | None = None, intent_hint: str | None = None) -> RagAnswer:
+        """retrieval_query / intent_hint: do disambiguation.resolve() cung cấp khi câu
+        hỏi chứa cụm đa nghĩa ("điểm thi") -> tìm đúng tài liệu + nhắc Gemini đúng chủ đề."""
         started = time.perf_counter()
         question = (question or "").strip()
 
         retrieved = []
         if question:
-            query = self._build_retrieval_query(question, history)
+            query = retrieval_query or self._build_retrieval_query(question, history)
             retrieved = self.retrieve(query, cursor=cursor)
         retrieval_ms = int((time.perf_counter() - started) * 1000)
 
         if question or not image:
             context, used_sources = self.build_context(retrieved)
+            if intent_hint:
+                context = f"[CHỦ ĐỀ ĐÃ XÁC ĐỊNH] {intent_hint}\n\n{context}"
         else:
             # Chỉ có ảnh, không có câu hỏi: không có gì để truy vấn KB;
             # dùng system prompt gốc (hỗ trợ đọc lỗi code trong ảnh - D1-02/05).

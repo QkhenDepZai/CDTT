@@ -308,3 +308,18 @@ def get_user_conversation(cursor, user_id, conversation_id):
         (conversation_id, user_id),
     )
     return cursor.fetchone()
+
+
+def get_pending_clarification(cursor, conversation_id):
+    """Nếu tin nhắn cuối của bot là câu HỎI LẠI (answer_status='clarify'),
+    trả về câu hỏi gốc của người dùng ngay trước đó; ngược lại None.
+    Dùng để ghép "điểm số" (câu trả lời) với "Em muốn biết điểm thi" (câu gốc)."""
+    cursor.execute(
+        "SELECT sender_type, content, answer_status FROM messages "
+        "WHERE conversation_id = %s ORDER BY id DESC LIMIT 2",
+        (conversation_id,),
+    )
+    rows = cursor.fetchall()
+    if len(rows) == 2 and rows[0]["answer_status"] == "clarify" and rows[1]["sender_type"] == "user":
+        return rows[1]["content"]
+    return None

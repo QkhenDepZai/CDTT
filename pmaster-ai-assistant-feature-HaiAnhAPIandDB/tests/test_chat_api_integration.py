@@ -127,3 +127,30 @@ def test_three_cannot_answer_escalates_to_staff(client):
     assert status[0]["status"] == "waiting_agent"
     assert _db_rows("SELECT id FROM agent_notifications WHERE conversation_id = %s",
                     (conversation_id,))
+
+
+def test_ambiguous_question_asks_back_then_answers_with_right_topic(client, monkeypatch):
+    import chat_service
+
+    test_client, gemini = client
+    gemini["reply"] = ("Điểm thi được công bố trên bảng xếp hạng.", "answered")
+    faq_calls = []
+    monkeypatch.setattr(chat_service, "find_best_faq_match",
+                        lambda cursor, text: faq_calls.append(text))
+    user_id, conversation_id = _start_session(test_client)
+
+    first = test_client.post("/api/chat", headers=SITE_HEADERS, json={
+        "message": "Em muốn biết điểm thi", "user_id": user_id,
+        "conversation_id": conversation_id}).get_json()
+    assert first["answer_status"] == "clarify"
+    assert first["suggestions"] == ["Điểm số / kết quả bài thi", "Địa điểm tổ chức thi"]
+    assert "fail_count" not in first
+    contexts_before = len(gemini["contexts"])
+
+    second = test_client.post("/api/chat", headers=SITE_HEADERS, json={
+        "message": "Điểm số / kết quả bài thi", "user_id": user_id,
+        "conversation_id": conversation_id}).get_json()
+    assert second["answer_status"] == "answered"
+    assert len(gemini["contexts"]) == contexts_before + 1
+    assert "KHÔNG phải địa điểm tổ chức thi" in gemini["contexts"][-1]
+    assert faq_calls == [], "câu đa nghĩa không được đi qua FAQ khớp từ khoá"

@@ -17,10 +17,12 @@ hiển thị (JSON cho web, tin nhắn text cho Messenger/Zalo).
 """
 import logging
 
+import disambiguation
 from conversation_memory import build_history_for_gemini
 from database import (
     create_agent_notification,
     get_conversation_messages,
+    get_pending_clarification,
     increment_fail_count,
     log_violation,
     reset_fail_count,
@@ -107,6 +109,22 @@ def _refuse(cursor, connection, conversation, user_id, text, image_url, log_reas
     return {"reply": reply}
 
 
+def _resolve_ambiguity(cursor, conversation_id, text, image):
+    if not text or image is not None:
+        return disambiguation.Resolution()
+    try:
+        previous = get_pending_clarification(cursor, conversation_id)
+    except Exception:  # noqa: BLE001 - DB chưa chạy migration v2: bỏ qua ngữ cảnh làm rõ
+        logger.warning("[ChatService] Không đọc được trạng thái hỏi lại", exc_info=True)
+        previous = None
+    resolution = disambiguation.resolve(text, previous_text=previous)
+    if resolution.needs_clarification and previous:
+        # Đã hỏi lại 1 lần mà vẫn mơ hồ -> không hỏi lại mãi, để RAG + Gemini tự xử lý.
+        return disambiguation.Resolution(rule=resolution.rule,
+                                         retrieval_query=f"{previous} {text}")
+    return resolution
+
+
 def process_message(cursor, connection, *, conversation, user_id, text, image=None, image_url=None):
     """Xử lý 1 tin nhắn của người dùng trên 1 phiên đã xác định.
 
@@ -152,11 +170,27 @@ def process_message(cursor, connection, *, conversation, user_id, text, image=No
                               violation_reason, VIOLATION_MESSAGE)
             return {**payload, "violation": True}
 
-    # 4. Lưu tin nhắn hợp lệ.
+    # 4. Khử nhập nhằng cụm đa nghĩa ("điểm thi" = điểm số hay địa điểm?) - D1-06.
+    resolution = _resolve_ambiguity(cursor, conversation_id, text, image)
+
     save_message(cursor, connection, conversation_id, 'user', text, image_url=image_url)
 
+    if resolution.needs_clarification:
+        options = "\n".join(f"- {option}" for option in resolution.options)
+        reply = f"{resolution.clarification}\n{options}"
+        save_message(cursor, connection, conversation_id, 'model', reply, answer_status='clarify')
+        return {
+            "reply": reply,
+            "answer_status": "clarify",
+            "clarification_question": resolution.clarification,
+            "suggestions": resolution.options,
+            "used_faq": False,
+        }
+
     # 5. FAQ khớp trực tiếp (chỉ với text; FAQ matcher không hiểu ảnh).
-    if image is None and text:
+    #    BỎ QUA khi câu hỏi chứa cụm đa nghĩa: so khớp từ khoá chính là chỗ dễ
+    #    bị bẫy nhất ("điểm thi" -> FAQ "Địa điểm thi"); để RAG + gợi ý xử lý.
+    if image is None and text and not resolution.applied:
         faq_row = find_best_faq_match(cursor, text)
         if faq_row:
             reply = faq_row['tra_loi_chuan']
@@ -167,7 +201,10 @@ def process_message(cursor, connection, *, conversation, user_id, text, image=No
     # 6. RAG: Knowledge Base + Gemini.
     db_messages = get_conversation_messages(cursor, conversation_id)
     history = build_history_for_gemini(cursor, connection, conversation_id, db_messages)
-    answer = get_rag_service().answer(text, history, image=image, cursor=cursor)
+    answer = get_rag_service().answer(
+        text, history, image=image, cursor=cursor,
+        retrieval_query=resolution.retrieval_query, intent_hint=resolution.intent_hint,
+    )
     save_rag_reply(cursor, connection, conversation_id, answer)
 
     payload = {

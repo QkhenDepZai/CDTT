@@ -1,0 +1,55 @@
+question,expected,note
+Em muốn biết điểm thi,clarify,bẫy: điểm số hay địa điểm
+Điểm thi,clarify,bẫy: quá ngắn
+cho em hỏi về điểm thi với ạ,clarify,bẫy
+Tài khoản của em,clarify,bẫy: ôn luyện hay dự thi
+Có lịch không ạ?,clarify,bẫy: lịch thi hay Prep Series
+Xem điểm thi ở đâu?,Bảng xếp hạng|Lỗi kết quả,bẫy: có "ở đâu" nhưng hỏi điểm số
+Tra cứu điểm thi vòng loại ở đâu,Bảng xếp hạng|Lỗi kết quả,bẫy
+Điểm thi của em bị sai thì làm sao,Khiếu nại kết quả|Lỗi kết quả,bẫy
+Muốn phúc khảo điểm thi thì làm thế nào,Khiếu nại kết quả,bẫy
+Bao nhiêu điểm thì được cấp chứng chỉ COS Pro,Điều kiện cấp COS Pro,bẫy
+Điểm thi được tính như thế nào,Tiêu chí chấm điểm,bẫy
+Sao em chưa thấy điểm thi của mình,Lỗi kết quả|Bảng xếp hạng,bẫy
+Được mấy điểm thì vào vòng chung kết,Điều kiện vào chung kết|Bảng xếp hạng,bẫy
+Điểm thi ở Hà Nội là trường nào,Địa điểm thi,bẫy: địa điểm
+diem thi o dau vay ad,Địa điểm thi,bẫy: không dấu
+Điểm thi Đà Nẵng ở chỗ nào,Địa điểm thi,bẫy
+Địa chỉ điểm thi chung kết ở đâu,Địa điểm thi,bẫy
+Cuộc thi tổ chức tại đâu,Địa điểm thi,diễn đạt khác
+Thi ở đâu ạ,Địa điểm thi,ngắn
+Phòng thi có được mang điện thoại không,Nội quy thi,bẫy: phòng thi ≠ địa điểm
+Tài khoản ôn luyện có những gì,Sử dụng tài khoản ôn luyện,bẫy tài khoản
+Làm sao để có tài khoản luyện tập miễn phí,Sử dụng tài khoản ôn luyện,bẫy tài khoản
+Tài khoản đăng ký dự thi của em bị khóa,Lỗi tài khoản/hệ thống,bẫy tài khoản
+Không nhận được mã OTP khi đăng ký tài khoản,Lỗi tài khoản/hệ thống,bẫy tài khoản
+Quên mật khẩu tài khoản ôn luyện,Hiểu hội thoại nhiều lượt|Sử dụng tài khoản ôn luyện|Hướng dẫn sử dụng hệ thống,bẫy tài khoản
+Lịch thi vòng loại khi nào,Lịch trình cuộc thi|Thông báo lịch thi,bẫy lịch
+Lịch các buổi Prep Series thế nào,Python Prep Series,bẫy lịch
+Xem ca thi và số báo danh ở đâu,Thông báo lịch thi,bẫy: ở đâu nhưng không phải địa điểm
+Xem bảng xếp hạng ở đâu,Bảng xếp hạng,bẫy: bảng ≠ Bảng A/B
+Em 15 tuổi thì thi bảng nào,Đối tượng Bảng A|Hiểu câu hỏi tương đương,diễn đạt khác
+Sinh viên năm 3 đăng ký bảng gì,Đối tượng Bảng B,diễn đạt khác
+Chưa từng học lập trình có được đăng ký không,Điều kiện tham gia,diễn đạt khác (TC-FAQ-02)
+Em lỡ đăng ký nhầm bảng rồi,Chuyển đổi bảng thi,diễn đạt khác
+Hạn cuối đăng ký là ngày nào,Thời gian đăng ký,diễn đạt khác
+Lệ phí dự thi bao nhiêu tiền,Thời gian đăng ký,diễn đạt khác
+Vòng loại thi trực tuyến hay tại chỗ,Hình thức vòng loại,diễn đạt khác
+Chung kết Bảng B làm bài trong bao lâu,Hình thức vòng chung kết,diễn đạt khác
+Giải nhất được bao nhiêu tiền,Cơ cấu giải thưởng,diễn đạt khác
+Lấy top bao nhiêu vào chung kết,Điều kiện vào chung kết,diễn đạt khác
+Thi xong có giấy chứng nhận không,Quyền lợi thí sinh,diễn đạt khác
+COS Pro có giá trị gì,Giá trị COS Pro,diễn đạt khác
+Bảng A học những kiến thức gì,Nội dung Bảng A,diễn đạt khác
+Bảng B có cần thuật toán nâng cao không,Nội dung Bảng B,diễn đạt khác
+Thi bằng C++ được không,Hình thức và ngôn ngữ,diễn đạt khác
+Đề thi có những dạng bài nào,Dạng bài tập|Nội dung Bảng A|Nội dung Bảng B,diễn đạt khác
+Có được mang tài liệu vào phòng thi không,Nội quy thi,diễn đạt khác
+Đi thi mặc gì,Nội quy thi,diễn đạt khác
+Có đề thi mẫu không,Đề thi mẫu,diễn đạt khác
+Python Prep Series là gì,Python Prep Series,diễn đạt khác
+Đi thi cần mang giấy tờ gì,Thông báo lịch thi,diễn đạt khác
+Bấm nộp bài mà kết quả không được lưu,Lỗi kết quả,diễn đạt khác
+Có mẹo ôn thi nào không,Sử dụng tài khoản ôn luyện,diễn đạt khác
+Khi nào thi chung kết,Lịch trình cuộc thi,diễn đạt khác
+Cách tính điểm mỗi vòng ra sao,Tiêu chí chấm điểm,diễn đạt khác
