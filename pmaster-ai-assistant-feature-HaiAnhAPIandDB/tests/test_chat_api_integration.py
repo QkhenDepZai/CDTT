@@ -35,12 +35,12 @@ def client(test_db, tmp_path, monkeypatch):
 
     gemini = {"reply": ("Bảng A dành cho học sinh 12-18 tuổi.", "answered"), "contexts": []}
 
-    def fake_create_chat(history, retrieval_context=None):
+    def fake_create_chat(history, retrieval_context=None, model=None):
         gemini["contexts"].append(retrieval_context)
         return object()
 
     monkeypatch.setattr(rag_service, "create_chat", fake_create_chat)
-    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg: gemini["reply"])
+    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg, **kw: gemini["reply"])
 
     ingest_service.ingest_bytes(
         "Bảng A dành cho học sinh từ 12 đến 18 tuổi. Bảng B dành cho sinh viên 19 đến 24 tuổi."

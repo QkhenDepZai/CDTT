@@ -30,8 +30,8 @@ def client(test_db, tmp_path, monkeypatch):
     monkeypatch.setattr(ingest_service, "get_embedding_service", lambda: fake)
     monkeypatch.setattr(ingest_service, "KNOWLEDGE_UPLOAD_FOLDER", str(tmp_path / "kb"))
     monkeypatch.setattr(rag_service, "_default_service", rag_service.RagService(retriever=kb))
-    monkeypatch.setattr(rag_service, "create_chat", lambda history, retrieval_context=None: None)
-    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg: ("OK", "answered"))
+    monkeypatch.setattr(rag_service, "create_chat", lambda history, retrieval_context=None, **kw: None)
+    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg, **kw: ("OK", "answered"))
     monkeypatch.setattr(chat_routes, "check_violation", lambda text: (False, None))
     monkeypatch.setattr(chat_routes, "find_best_faq_match", lambda cursor, text: None)
 

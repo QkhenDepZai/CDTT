@@ -93,12 +93,12 @@ def env(test_db, tmp_path, monkeypatch):
 
     gemini = {"reply": ("**Bảng A** thi 90 phút.", "answered"), "images": 0}
 
-    def send_image(chat, message, data, mime):
+    def send_image(chat, message, data, mime, **kw):
         gemini["images"] += 1
         return ("Ảnh báo lỗi thụt lề.", "answered")
 
-    monkeypatch.setattr(rag_service, "create_chat", lambda history, retrieval_context=None: None)
-    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg: gemini["reply"])
+    monkeypatch.setattr(rag_service, "create_chat", lambda history, retrieval_context=None, **kw: None)
+    monkeypatch.setattr(rag_service, "send_message_with_retry", lambda chat, msg, **kw: gemini["reply"])
     monkeypatch.setattr(rag_service, "send_message_with_image_retry", send_image)
     monkeypatch.setattr(chat_service, "check_violation", lambda text: (False, None))
     monkeypatch.setattr(chat_service, "find_best_faq_match", lambda cursor, text: None)

@@ -28,16 +28,18 @@ def gemini(monkeypatch):
     """Thay Gemini bằng bản giả lập, ghi lại context/message đã gửi."""
     calls = {"reply": ("Bảng A thi 90 phút.", "answered")}
 
-    def fake_create_chat(history, retrieval_context=None):
+    def fake_create_chat(history, retrieval_context=None, model=None):
+        calls.setdefault("models", []).append(model)
         calls["history"] = history
         calls["context"] = retrieval_context
         return object()
 
-    def fake_send(chat, message):
+    def fake_send(chat, message, max_retries=None):
         calls["message"] = message
-        return calls["reply"]
+        replies = calls.get("replies")
+        return replies.pop(0) if replies else calls["reply"]
 
-    def fake_send_image(chat, message, data, mime):
+    def fake_send_image(chat, message, data, mime, max_retries=None):
         calls["message"] = message
         calls["image"] = (data, mime)
         return calls["reply"]
@@ -138,3 +140,19 @@ def test_image_with_question_still_uses_knowledge_base(gemini):
         "Lỗi này là gì?", image=ImageInput(b"img", "image/jpeg"))
     assert "IndentationError" in gemini["context"]
     assert answer.chunk_ids == [1]
+
+
+def test_overloaded_primary_model_falls_back_to_backup_model(gemini, monkeypatch):
+    monkeypatch.setattr(rag_service, "GEMINI_MODEL_NAME", "model-chinh")
+    monkeypatch.setattr(rag_service, "GEMINI_FALLBACK_MODEL_NAME", "model-du-phong")
+    gemini["replies"] = [("Hệ thống AI đang quá tải", "server_error"), ("Bảng A thi 90 phút.", "answered")]
+    answer = RagService(retriever=FakeRetriever([_chunk(1, "Bảng A thi 90 phút.")])).answer("Bảng A?")
+    assert gemini["models"] == [None, "model-du-phong"]
+    assert answer.status == "answered" and answer.reply == "Bảng A thi 90 phút."
+
+
+def test_config_errors_do_not_switch_model(gemini, monkeypatch):
+    monkeypatch.setattr(rag_service, "GEMINI_FALLBACK_MODEL_NAME", "model-du-phong")
+    gemini["replies"] = [("Sai cấu hình", "authentication_error")]
+    answer = RagService(retriever=FakeRetriever([])).answer("Bảng A?")
+    assert gemini["models"] == [None] and answer.status == "authentication_error"

@@ -24,6 +24,8 @@ import time
 from dataclasses import asdict, dataclass, field
 
 from config import (
+    GEMINI_FALLBACK_MODEL_NAME,
+    GEMINI_MODEL_NAME,
     RAG_FOLLOWUP_MAX_WORDS,
     RAG_MAX_CHARS_PER_FIELD,
     RAG_MAX_CONTEXT_CHARS,
@@ -33,6 +35,10 @@ from config import (
 from gemini_client import create_chat, send_message_with_image_retry, send_message_with_retry
 
 logger = logging.getLogger("pmaster.rag")
+
+# Lỗi phía Google (quá tải / hết quota) -> thử model dự phòng. Lỗi cấu hình
+# (sai key, request sai) thì đổi model cũng không khỏi nên không chuyển.
+FALLBACK_STATUSES = {"server_error", "rate_limited"}
 
 NO_CONTEXT_NOTICE = (
     "(Không tìm thấy tài liệu nội bộ nào liên quan tới câu hỏi này. Nếu đây là câu hỏi "
@@ -185,6 +191,14 @@ class RagService:
         return "\n\n".join(blocks), used
 
     # ---- 3. Gọi Gemini -------------------------------------------------------
+    @staticmethod
+    def _generate(history, context, question, image, model=None, max_retries=None):
+        chat = create_chat(history or [], retrieval_context=context, model=model)
+        if image is not None:
+            return send_message_with_image_retry(chat, question, image.data, image.mime_type,
+                                                 max_retries=max_retries)
+        return send_message_with_retry(chat, question, max_retries=max_retries)
+
     def answer(self, question: str, history: list[dict] | None = None,
                image: ImageInput | None = None, cursor=None) -> RagAnswer:
         started = time.perf_counter()
@@ -203,11 +217,13 @@ class RagService:
             # dùng system prompt gốc (hỗ trợ đọc lỗi code trong ảnh - D1-02/05).
             context, used_sources = None, []
 
-        chat = create_chat(history or [], retrieval_context=context)
-        if image is not None:
-            reply, status = send_message_with_image_retry(chat, question, image.data, image.mime_type)
-        else:
-            reply, status = send_message_with_retry(chat, question)
+        reply, status = self._generate(history, context, question, image, model=None)
+        if status in FALLBACK_STATUSES and GEMINI_FALLBACK_MODEL_NAME \
+                and GEMINI_FALLBACK_MODEL_NAME != GEMINI_MODEL_NAME:
+            logger.warning("[RAG] Model %s lỗi (%s) -> chuyển sang model dự phòng %s",
+                           GEMINI_MODEL_NAME, status, GEMINI_FALLBACK_MODEL_NAME)
+            reply, status = self._generate(history, context, question, image,
+                                           model=GEMINI_FALLBACK_MODEL_NAME, max_retries=1)
 
         latency_ms = int((time.perf_counter() - started) * 1000)
         logger.info(

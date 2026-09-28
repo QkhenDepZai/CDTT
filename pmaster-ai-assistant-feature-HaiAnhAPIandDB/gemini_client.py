@@ -153,9 +153,10 @@ def _build_generation_config(retrieval_context=None):
     )
 
 
-def create_chat(history, retrieval_context=None):
+def create_chat(history, retrieval_context=None, model=None):
+    """model=None -> GEMINI_MODEL_NAME; truyền tên khác để dùng model dự phòng."""
     return client.chats.create(
-        model=GEMINI_MODEL_NAME,
+        model=model or GEMINI_MODEL_NAME,
         history=history,
         config=_build_generation_config(retrieval_context),
     )

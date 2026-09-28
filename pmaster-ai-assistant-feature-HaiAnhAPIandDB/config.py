@@ -36,6 +36,12 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 #    latency/token/cost/reasoning với gemini-3.1-flash-lite và gemini-3.5-flash).
 GEMINI_MODEL_NAME = os.getenv('GEMINI_MODEL_NAME', 'gemini-3.5-flash-lite')
 
+# Model DỰ PHÒNG: khi model chính vẫn báo 503 (quá tải) / 429 (hết quota) sau
+# khi đã thử lại, rag_service tự gửi lại câu hỏi bằng model này. Mỗi model có
+# hạn mức và tải riêng nên hiếm khi cả 2 cùng quá tải (NFR sẵn sàng 99.9%).
+# Để trống = tắt dự phòng.
+GEMINI_FALLBACK_MODEL_NAME = os.getenv('GEMINI_FALLBACK_MODEL_NAME', 'gemini-3.5-flash')
+
 # Model dùng riêng cho bước kiểm duyệt (moderation.check_violation). Đây chỉ là
 # bước "chấm điểm an toàn" 1 câu hỏi ngắn, không cần model mạnh -> dùng luôn
 # Flash-Lite để tối ưu chi phí/latency, tách biến môi trường riêng để có thể
