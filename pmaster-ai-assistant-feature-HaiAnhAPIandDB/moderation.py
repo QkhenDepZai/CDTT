@@ -1,7 +1,7 @@
 import logging
 
 from google.genai import types
-from gemini_client import client
+from gemini_client import client, thinking_config_for
 from config import GEMINI_MODERATION_MODEL_NAME
 
 logger = logging.getLogger("pmaster.moderation")
@@ -48,7 +48,7 @@ def check_violation(text: str):
             contents=text,
             config=types.GenerateContentConfig(
                 safety_settings=MODERATION_SAFETY_SETTINGS,
-                thinking_config=types.ThinkingConfig(thinking_level="minimal"),
+                thinking_config=thinking_config_for(GEMINI_MODERATION_MODEL_NAME, "minimal"),
                 max_output_tokens=50,
             ),
         )

@@ -144,11 +144,28 @@ def _build_system_prompt(retrieval_context=None):
     )
 
 
-def _build_generation_config(retrieval_context=None):
+def thinking_config_for(model, level=None):
+    """Cấu hình "thinking" đúng theo dòng model - gửi sai tham số là Google trả
+    400 INVALID_ARGUMENT (answer_status=invalid_request):
+    - Gemini 3.x: dùng thinking_level (minimal | low | medium | high).
+    - Gemini 2.5 Flash / Flash-Lite: KHÔNG hiểu thinking_level, dùng
+      thinking_budget=0 (tắt suy luận -> nhanh, rẻ; đủ cho chatbot FAQ).
+    - Model khác (2.5 Pro không cho tắt thinking, 2.0...): không gửi gì,
+      để model dùng mặc định của nó.
+    """
+    name = (model or "").lower()
+    if name.startswith("gemini-3"):
+        return types.ThinkingConfig(thinking_level=level or GEMINI_THINKING_LEVEL)
+    if name.startswith("gemini-2.5") and "pro" not in name:
+        return types.ThinkingConfig(thinking_budget=0)
+    return None
+
+
+def _build_generation_config(retrieval_context=None, model=None):
     return types.GenerateContentConfig(
         system_instruction=_build_system_prompt(retrieval_context),
         safety_settings=SAFETY_SETTINGS,
-        thinking_config=types.ThinkingConfig(thinking_level=GEMINI_THINKING_LEVEL),
+        thinking_config=thinking_config_for(model or GEMINI_MODEL_NAME),
         max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
     )
 
@@ -158,7 +175,7 @@ def create_chat(history, retrieval_context=None, model=None):
     return client.chats.create(
         model=model or GEMINI_MODEL_NAME,
         history=history,
-        config=_build_generation_config(retrieval_context),
+        config=_build_generation_config(retrieval_context, model),
     )
 
 
@@ -285,7 +302,7 @@ def summarize_history(conversation_text, previous_summary=None):
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SUMMARY_SYSTEM_PROMPT,
-                thinking_config=types.ThinkingConfig(thinking_level="minimal"),
+                thinking_config=thinking_config_for(GEMINI_MODERATION_MODEL_NAME, "minimal"),
                 max_output_tokens=300,
             ),
         )
@@ -342,7 +359,7 @@ def classify_faq_intent(user_message, faq_catalog):
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=FAQ_INTENT_CLASSIFIER_SYSTEM_PROMPT,
-                thinking_config=types.ThinkingConfig(thinking_level="minimal"),
+                thinking_config=thinking_config_for(GEMINI_MODERATION_MODEL_NAME, "minimal"),
                 max_output_tokens=10,
             ),
         )
