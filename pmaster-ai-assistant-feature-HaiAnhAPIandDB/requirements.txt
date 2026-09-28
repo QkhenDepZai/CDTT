@@ -6,3 +6,7 @@ Pillow
 pandas
 openpyxl
 sqlalchemy
+numpy>=1.26
+pypdf>=4.0
+python-docx>=1.1
+pytest>=8.0

@@ -99,3 +99,41 @@ RAG_MAX_CHARS_PER_FIELD = int(os.getenv('RAG_MAX_CHARS_PER_FIELD', '400'))
 # trong bản này - xem ghi chú trong image_handler.py để mở rộng sau).
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads/images')
 MAX_IMAGE_SIZE_MB = 5
+
+# ============================================================
+# MODULE KNOWLEDGE BASE / VECTOR RAG (Giai đoạn 1 - thư mục knowledge/)
+# ============================================================
+# Model embedding của Google. "gemini-embedding-001" là bản GA, hỗ trợ tham
+# số task_type (RETRIEVAL_DOCUMENT / RETRIEVAL_QUERY). Nếu đổi sang
+# "gemini-embedding-2", knowledge/embedding_service.py tự chuyển sang cách
+# ghi task bằng tiền tố trong nội dung (model đó không nhận task_type).
+# LƯU Ý: đổi model/số chiều => BẮT BUỘC chạy lại
+# `python manage_knowledge.py reindex --all` vì vector cũ không so sánh được.
+EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'gemini-embedding-001')
+
+# 768 chiều: chất lượng gần bằng 3072 (nhờ Matryoshka) nhưng nhẹ hơn 4 lần
+# về RAM/DB (768 * 4 byte = 3 KB/chunk). Các giá trị khuyến nghị: 768 | 1536 | 3072.
+EMBEDDING_DIMENSION = int(os.getenv('EMBEDDING_DIMENSION', '768'))
+
+# Số đoạn văn gửi trong 1 request embed (API giới hạn 100/lần).
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '50'))
+EMBEDDING_TIMEOUT_MS = int(os.getenv('EMBEDDING_TIMEOUT_MS', '60000'))
+EMBEDDING_MAX_RETRIES = int(os.getenv('EMBEDDING_MAX_RETRIES', '3'))
+
+# Chunking theo ký tự: ~1000 ký tự tiếng Việt ~ 250-300 token, đủ chứa trọn
+# 1 điều khoản thể lệ; overlap 150 ký tự để không mất ngữ cảnh ở ranh giới.
+CHUNK_SIZE_CHARS = int(os.getenv('CHUNK_SIZE_CHARS', '1000'))
+CHUNK_OVERLAP_CHARS = int(os.getenv('CHUNK_OVERLAP_CHARS', '150'))
+
+# Ngưỡng cosine tối thiểu để 1 chunk được coi là "liên quan". Dưới ngưỡng
+# => coi như KHÔNG tìm thấy trong KB -> AI phải báo không rõ (D1-10).
+# Nên hiệu chỉnh lại bằng `python manage_knowledge.py search "..."` trên
+# bộ câu hỏi thử của Ban tổ chức.
+RAG_MIN_SIMILARITY = float(os.getenv('RAG_MIN_SIMILARITY', '0.55'))
+
+# Chu kỳ (giây) mỗi tiến trình kiểm tra KB có thay đổi (upload từ worker
+# khác) để nạp lại chỉ mục vector trong RAM.
+RAG_INDEX_REFRESH_SECONDS = int(os.getenv('RAG_INDEX_REFRESH_SECONDS', '30'))
+
+KNOWLEDGE_UPLOAD_FOLDER = os.getenv('KNOWLEDGE_UPLOAD_FOLDER', 'uploads/knowledge')
+KNOWLEDGE_MAX_FILE_MB = int(os.getenv('KNOWLEDGE_MAX_FILE_MB', '20'))
