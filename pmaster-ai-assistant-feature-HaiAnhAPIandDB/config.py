@@ -173,3 +173,36 @@ ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', '')
 ENFORCE_USER_TOKEN = os.getenv('ENFORCE_USER_TOKEN', 'false').lower() in ('1', 'true', 'yes')
 
 HISTORY_MAX_PAGE_SIZE = int(os.getenv('HISTORY_MAX_PAGE_SIZE', '100'))
+
+# ============================================================
+# MODULE ĐA KÊNH (Giai đoạn 4 - channels/, routes/webhooks.py)
+# Kênh chỉ bật khi điền ĐỦ khoá bắt buộc; thiếu khoá => webhook trả 503
+# (fail-closed, không bao giờ bỏ qua bước xác thực chữ ký).
+# ============================================================
+# ---- Facebook Messenger (developers.facebook.com > App > Messenger) ----
+FB_PAGE_ACCESS_TOKEN = os.getenv('FB_PAGE_ACCESS_TOKEN', '')
+# App Secret: dùng kiểm tra chữ ký X-Hub-Signature-256 của mọi webhook.
+FB_APP_SECRET = os.getenv('FB_APP_SECRET', '')
+# Chuỗi tự đặt, nhập giống hệt ở ô "Verify token" khi đăng ký webhook.
+FB_VERIFY_TOKEN = os.getenv('FB_VERIFY_TOKEN', '')
+FB_GRAPH_API_VERSION = os.getenv('FB_GRAPH_API_VERSION', 'v23.0')
+# true => tin tư vấn viên gửi kèm tag HUMAN_AGENT (trả lời được tới 7 ngày sau
+# tin cuối của người dùng thay vì 24h). Cần Meta duyệt quyền Human Agent.
+FB_USE_HUMAN_AGENT_TAG = os.getenv('FB_USE_HUMAN_AGENT_TAG', 'false').lower() in ('1', 'true', 'yes')
+
+# ---- Zalo Official Account (developers.zalo.me > Ứng dụng > Official Account) ----
+ZALO_APP_ID = os.getenv('ZALO_APP_ID', '')
+# Khoá bí mật của ỨNG DỤNG: dùng khi làm mới access token (header secret_key).
+ZALO_APP_SECRET = os.getenv('ZALO_APP_SECRET', '')
+# Khoá bí mật của OA ("OA Secret Key" ở mục Webhook): kiểm tra X-ZEvent-Signature.
+ZALO_OA_SECRET_KEY = os.getenv('ZALO_OA_SECRET_KEY', '')
+# Token khởi tạo lần đầu (lấy qua OAuth v4). Sau đó hệ thống tự làm mới và
+# lưu token mới vào bảng channel_tokens; không cần sửa .env nữa.
+ZALO_ACCESS_TOKEN = os.getenv('ZALO_ACCESS_TOKEN', '')
+ZALO_REFRESH_TOKEN = os.getenv('ZALO_REFRESH_TOKEN', '')
+ZALO_OA_ID = os.getenv('ZALO_OA_ID', '')
+
+# Số luồng xử lý tin nhắn đa kênh song song. Webhook trả 200 ngay, việc gọi
+# AI chạy nền (Messenger/Zalo sẽ gửi lại nếu không nhận 200 trong vài giây).
+CHANNEL_WORKERS = int(os.getenv('CHANNEL_WORKERS', '4'))
+CHANNEL_HTTP_TIMEOUT_SECONDS = float(os.getenv('CHANNEL_HTTP_TIMEOUT_SECONDS', '10'))

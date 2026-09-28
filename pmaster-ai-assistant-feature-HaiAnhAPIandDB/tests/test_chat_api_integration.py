@@ -21,7 +21,7 @@ SITE_HEADERS = {"X-Site-Key": "site_demo_001"}
 def client(test_db, tmp_path, monkeypatch):
     import rag_service
     from knowledge import ingest_service, retriever
-    from routes import chat as chat_routes
+    import chat_service as chat_routes
 
     fake_embeddings = FakeEmbeddingService()
     kb = retriever.KnowledgeRetriever(embedding_service=fake_embeddings, refresh_seconds=0)

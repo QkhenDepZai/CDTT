@@ -1485,6 +1485,333 @@
           ]
         }
       ]
+    },
+    {
+      "name": "5. Webhook đa kênh (mô phỏng)",
+      "description": "Giả lập Facebook/Zalo gọi webhook. Chữ ký được tính tự động ở Pre-request Script từ fbAppSecret / zaloOaSecretKey (phải trùng .env). Câu trả lời được gửi thật tới Graph API / Zalo API: với PSID/user_id giả, nền tảng sẽ báo lỗi và server ghi log - đây là hành vi đúng. Dùng PSID/user_id thật của tài khoản test để nhận tin.",
+      "item": [
+        {
+          "name": "Messenger: xác minh webhook (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/messenger?hub.mode=subscribe&hub.verify_token={{fbVerifyToken}}&hub.challenge=123456",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "messenger"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "{{fbVerifyToken}}"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "123456"
+                }
+              ]
+            },
+            "description": "Meta gọi request này khi bạn bấm 'Verify and save' trong cài đặt Webhook."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (200, 503)', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "if (pm.response.code === 200) pm.test('Trả đúng challenge', () => pm.expect(pm.response.text()).to.eql('123456'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Messenger: nút Bắt đầu (GET_STARTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/messenger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "messenger"
+              ]
+            },
+            "description": "Người dùng mới bấm 'Bắt đầu' -> lời chào + quick reply FAQ + 'Gặp tư vấn viên'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"object\":\"page\",\"entry\":[{\"id\":\"{{fbPageId}}\",\"time\":1,\"messaging\":[{\"sender\":{\"id\":\"{{fbTestPsid}}\"},\"recipient\":{\"id\":\"{{fbPageId}}\"},\"timestamp\":{{eventTs}},\"postback\":{\"mid\":\"{{eventId}}\",\"title\":\"Bắt đầu\",\"payload\":\"GET_STARTED\"}}]}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mỗi lần gửi tạo event id mới để không bị chặn là sự kiện trùng.",
+                  "pm.collectionVariables.set('eventId', 'evt-' + Date.now());",
+                  "pm.collectionVariables.set('eventTs', String(Date.now()));",
+                  "// Chữ ký giống hệt Meta: sha256=HMAC-SHA256(App Secret, raw body).",
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const secret = pm.variables.get('fbAppSecret');",
+                  "const cryptoJs = require('crypto-js');",
+                  "const sig = cryptoJs.HmacSHA256(body, secret).toString(cryptoJs.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Hub-Signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (200, 503)', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "if (pm.response.code === 503) console.warn('Kênh chưa cấu hình đủ khoá trong .env');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Messenger: tin nhắn text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/messenger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "messenger"
+              ]
+            },
+            "description": "Webhook trả 200 ngay, AI xử lý nền rồi gửi trả lời qua Send API.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"object\":\"page\",\"entry\":[{\"id\":\"{{fbPageId}}\",\"time\":1,\"messaging\":[{\"sender\":{\"id\":\"{{fbTestPsid}}\"},\"recipient\":{\"id\":\"{{fbPageId}}\"},\"timestamp\":{{eventTs}},\"message\":{\"mid\":\"{{eventId}}\",\"text\":\"Bảng A dành cho độ tuổi nào?\"}}]}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mỗi lần gửi tạo event id mới để không bị chặn là sự kiện trùng.",
+                  "pm.collectionVariables.set('eventId', 'evt-' + Date.now());",
+                  "pm.collectionVariables.set('eventTs', String(Date.now()));",
+                  "// Chữ ký giống hệt Meta: sha256=HMAC-SHA256(App Secret, raw body).",
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const secret = pm.variables.get('fbAppSecret');",
+                  "const cryptoJs = require('crypto-js');",
+                  "const sig = cryptoJs.HmacSHA256(body, secret).toString(cryptoJs.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Hub-Signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (200, 503)', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "if (pm.response.code === 503) console.warn('Kênh chưa cấu hình đủ khoá trong .env');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Messenger: sai chữ ký -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Hub-Signature-256",
+                "value": "sha256=deadbeef"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/messenger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "messenger"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"page\",\n  \"entry\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (403, 503)', () => pm.expect(pm.response.code).to.be.oneOf([403, 503]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Zalo: yêu cầu gặp tư vấn viên",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/zalo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "zalo"
+              ]
+            },
+            "description": "Sự kiện user_send_text; câu 'gặp tư vấn viên' -> chuyển trạng thái chờ tư vấn viên.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"app_id\":\"{{zaloAppId}}\",\"user_id_by_app\":\"test\",\"event_name\":\"user_send_text\",\"timestamp\":\"{{eventTs}}\",\"sender\":{\"id\":\"{{zaloTestUserId}}\"},\"recipient\":{\"id\":\"{{zaloOaId}}\"},\"message\":{\"text\":\"Cho mình gặp tư vấn viên\",\"msg_id\":\"{{eventId}}\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mỗi lần gửi tạo event id mới để không bị chặn là sự kiện trùng.",
+                  "pm.collectionVariables.set('eventId', 'evt-' + Date.now());",
+                  "pm.collectionVariables.set('eventTs', String(Date.now()));",
+                  "// Chữ ký giống hệt Zalo: mac=SHA256(app_id + raw body + timestamp + OA secret key).",
+                  "const cryptoJs = require('crypto-js');",
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const base = pm.variables.get('zaloAppId') + body + pm.collectionVariables.get('eventTs')",
+                  "    + pm.variables.get('zaloOaSecretKey');",
+                  "pm.request.headers.upsert({ key: 'X-ZEvent-Signature', value: 'mac=' + cryptoJs.SHA256(base).toString() });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (200, 503)', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "if (pm.response.code === 503) console.warn('Kênh chưa cấu hình đủ khoá trong .env');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Zalo: sai chữ ký -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-ZEvent-Signature",
+                "value": "mac=deadbeef"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/zalo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "zalo"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"app_id\": \"{{zaloAppId}}\",\n  \"event_name\": \"user_send_text\",\n  \"timestamp\": \"1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status hợp lệ (403, 503)', () => pm.expect(pm.response.code).to.be.oneOf([403, 503]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1526,6 +1853,14 @@
     },
     {
       "key": "nextBeforeId",
+      "value": ""
+    },
+    {
+      "key": "eventId",
+      "value": ""
+    },
+    {
+      "key": "eventTs",
       "value": ""
     }
   ]

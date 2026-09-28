@@ -60,6 +60,13 @@ def warn_optional_config():
         logger.warning("ADMIN_API_KEY chưa đặt hoặc < 16 ký tự: API quản trị /api/knowledge/* "
                        "đang bị khoá (chỉ quản trị được qua manage_knowledge.py).")
 
+    from channels.registry import channel_status
+    for channel, enabled in channel_status().items():
+        if enabled:
+            logger.info("Kênh %s: BẬT (webhook /webhooks/%s).", channel, channel)
+        else:
+            logger.info("Kênh %s: tắt (chưa điền đủ khoá trong .env).", channel)
+
 
 def warm_up_knowledge_base():
     """Nạp chỉ mục vector. Lỗi ở đây KHÔNG chặn khởi động: chatbot vẫn chạy

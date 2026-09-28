@@ -8,6 +8,7 @@ from routes.uploads import uploads_bp
 from routes.health import health_bp
 from routes.history import history_bp
 from routes.knowledge import knowledge_bp
+from routes.webhooks import webhooks_bp
 from config import KNOWLEDGE_MAX_FILE_MB, MAX_IMAGE_SIZE_MB
 
 MB = 1024 * 1024
@@ -51,6 +52,7 @@ app.register_blueprint(uploads_bp)
 app.register_blueprint(health_bp)
 app.register_blueprint(history_bp)
 app.register_blueprint(knowledge_bp)
+app.register_blueprint(webhooks_bp)
 
 
 @app.errorhandler(413)

@@ -29,8 +29,11 @@ def health():
         except Exception as exc:  # noqa: BLE001 - health check không được tự sập
             logger.error("[Health] Không đọc được chỉ mục KB: %s", exc)
 
+    from channels.registry import channel_status
+
     body = {
         "status": "ok" if db_ok else "degraded",
+        "channels": {"web": True, **channel_status()},
         "database": "ok" if db_ok else "error",
         "knowledge_base_chunks_loaded": kb_chunks,
         "llm_model": GEMINI_MODEL_NAME,

@@ -22,7 +22,7 @@ def client(test_db, tmp_path, monkeypatch):
     import rag_service
     from config import ADMIN_API_KEY
     from knowledge import ingest_service, retriever
-    from routes import chat as chat_routes
+    import chat_service as chat_routes
 
     fake = FakeEmbeddingService()
     kb = retriever.KnowledgeRetriever(embedding_service=fake, refresh_seconds=0)

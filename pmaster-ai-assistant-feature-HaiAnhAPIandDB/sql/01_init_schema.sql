@@ -264,6 +264,35 @@ CREATE TABLE IF NOT EXISTS agent_notifications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
+-- 6. ĐA KÊNH (Giai đoạn 4 - thư mục channels/)
+--    channel_inbound_events: chống xử lý trùng. Facebook/Zalo gửi lại
+--      (retry) webhook nếu không nhận 200 kịp -> UNIQUE(channel, event_key)
+--      đảm bảo 1 tin nhắn chỉ được trả lời 1 lần, kể cả khi chạy nhiều worker.
+--    channel_tokens: access/refresh token của Zalo OA. Zalo cấp refresh
+--      token MỚI sau mỗi lần làm mới (token cũ mất hiệu lực) nên phải lưu bền
+--      vững trong DB, không thể chỉ để trong .env.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS channel_inbound_events (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    channel      ENUM('web', 'messenger', 'zalo') NOT NULL,
+    event_key    VARCHAR(191) NOT NULL,
+    received_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_inbound_event (channel, event_key),
+    KEY idx_inbound_received (received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS channel_tokens (
+    channel             ENUM('messenger', 'zalo') NOT NULL,
+    channel_account_id  VARCHAR(128) NOT NULL,
+    access_token        TEXT         NOT NULL,
+    refresh_token       TEXT         NULL,
+    expires_at          DATETIME     NULL,
+    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                     ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (channel, channel_account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
 -- 5. SEED DỮ LIỆU TỐI THIỂU (idempotent - chạy lại không nhân bản)
 -- ---------------------------------------------------------------------
 INSERT INTO sites (site_key, allowed_domain)

@@ -1,4 +1,8 @@
+import logging
+
 from flask import Blueprint, request, jsonify
+
+from channels.dispatcher import deliver_staff_reply
 
 from database import (
     get_db_connection,
@@ -14,6 +18,19 @@ from database import (
 )
 
 staff_bp = Blueprint('staff', __name__)
+logger = logging.getLogger("pmaster.routes.staff")
+
+CLOSE_MESSAGE = "Tư vấn viên đã đánh dấu hoàn thành, phiên chat đã đóng."
+
+
+def _deliver(conversation_id, text):
+    """Đẩy tin ra Messenger/Zalo nếu phiên thuộc các kênh đó. None = phiên web
+    (widget tự lấy tin qua API); False = gửi thất bại (đã log)."""
+    try:
+        return deliver_staff_reply(conversation_id, text)
+    except Exception:  # noqa: BLE001 - tin đã lưu DB, lỗi gửi kênh không làm hỏng request
+        logger.exception("[Staff] Không đẩy được tin ra kênh cho phiên %s", conversation_id)
+        return False
 
 
 def _staff_id_from_request(data=None):
@@ -143,7 +160,9 @@ def staff_reply(conversation_id):
             if conversation["status"] not in ("agent", "waiting_agent"):
                 return jsonify({"error": "Phiên chat không ở trạng thái tư vấn viên"}), 409
             save_message(cursor, connection, conversation_id, 'staff', message)
-        return jsonify({"status": "success", "conversation_id": conversation_id, "staff_id": staff_id})
+        delivered = _deliver(conversation_id, message)
+        return jsonify({"status": "success", "conversation_id": conversation_id,
+                        "staff_id": staff_id, "channel_delivered": delivered})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -163,9 +182,10 @@ def staff_close(conversation_id):
             if not conversation:
                 return jsonify({"error": "Không tìm thấy phiên chat"}), 404
             close_conversation(cursor, connection, conversation_id)
-            save_message(cursor, connection, conversation_id, 'system',
-                         "Tư vấn viên đã đánh dấu hoàn thành, phiên chat đã đóng.")
-        return jsonify({"status": "success", "conversation_id": conversation_id, "staff_id": staff_id})
+            save_message(cursor, connection, conversation_id, 'system', CLOSE_MESSAGE)
+        delivered = _deliver(conversation_id, CLOSE_MESSAGE)
+        return jsonify({"status": "success", "conversation_id": conversation_id,
+                        "staff_id": staff_id, "channel_delivered": delivered})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
