@@ -19,15 +19,9 @@ So khớp trên văn bản đã BỎ DẤU nên hiểu cả khi người dùng g
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
 
-
-def strip_accents(text: str) -> str:
-    """'Địa điểm thi Ở ĐÂU?' -> 'dia diem thi o dau?' (chuẩn hoá để so khớp)."""
-    text = unicodedata.normalize("NFD", (text or "").lower())
-    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
-    return re.sub(r"\s+", " ", text.replace("đ", "d")).strip()
+from text_utils import strip_accents  # noqa: F401 - giữ import cũ "from disambiguation import strip_accents"
 
 
 @dataclass

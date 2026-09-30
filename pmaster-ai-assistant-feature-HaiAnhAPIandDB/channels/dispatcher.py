@@ -147,7 +147,7 @@ def process_event(adapter: ChannelAdapter, event: IncomingMessage) -> str | None
                 else:
                     if event.text:
                         save_message(cursor, connection, conversation_id, 'user', event.text)
-                    reply = chat_service.request_agent(cursor, connection, conversation_id)
+                    reply = chat_service.request_agent(cursor, connection, conversation_id).message
                 _send(adapter, recipient, reply)
                 return reply
 

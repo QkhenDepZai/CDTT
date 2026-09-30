@@ -1,6 +1,8 @@
 import logging
+from datetime import date, datetime
 
 from flask import Flask, jsonify, request
+from flask.json.provider import DefaultJSONProvider
 from cors import handle_cors_and_site_key, add_cors_headers
 from routes.chat import chat_bp
 from routes.staff import staff_bp
@@ -9,7 +11,10 @@ from routes.health import health_bp
 from routes.history import history_bp
 from routes.knowledge import knowledge_bp
 from routes.webhooks import webhooks_bp
+from routes.admin import admin_bp
+from routes.pages import pages_bp
 from config import KNOWLEDGE_MAX_FILE_MB, MAX_IMAGE_SIZE_MB
+from image_handler import ERROR_TOO_LARGE
 
 MB = 1024 * 1024
 
@@ -21,7 +26,22 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
+
+class JSONProvider(DefaultJSONProvider):
+    """Ngày giờ trả dạng "YYYY-MM-DD HH:MM:SS" (giờ lưu trong MySQL) thay vì
+    định dạng HTTP "..., GMT" mặc định của Flask - dễ hiểu nhầm múi giờ."""
+
+    @staticmethod
+    def default(o):
+        if isinstance(o, datetime):
+            return o.isoformat(sep=" ")
+        if isinstance(o, date):
+            return o.isoformat()
+        return DefaultJSONProvider.default(o)
+
+
 app = Flask(__name__)
+app.json = JSONProvider(app)
 
 # Giới hạn chung = file lớn nhất được phép (tài liệu Knowledge Base) + buffer
 # cho các trường form-data khác. Riêng route ảnh bị chặn chặt hơn ở
@@ -36,10 +56,8 @@ def _limit_image_upload_size():
     # Từ chối sớm theo header Content-Length, trước khi Flask đọc body vào bộ nhớ.
     if request.path.startswith("/api/chat/image") and \
             (request.content_length or 0) > (MAX_IMAGE_SIZE_MB + 1) * MB:
-        return jsonify({
-            "error": "Dung lượng ảnh vượt quá giới hạn cho phép.",
-            "max_image_size_mb": MAX_IMAGE_SIZE_MB,
-        }), 413
+        # Cùng mã lỗi/thông báo với image_handler.validate_image (TC-IMG-03).
+        return jsonify({"error": ERROR_TOO_LARGE, "max_image_size_mb": MAX_IMAGE_SIZE_MB}), 400
     return None
 
 
@@ -53,6 +71,8 @@ app.register_blueprint(health_bp)
 app.register_blueprint(history_bp)
 app.register_blueprint(knowledge_bp)
 app.register_blueprint(webhooks_bp)
+app.register_blueprint(admin_bp)
+app.register_blueprint(pages_bp)
 
 
 @app.errorhandler(413)

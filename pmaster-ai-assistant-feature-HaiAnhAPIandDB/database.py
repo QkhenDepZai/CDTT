@@ -6,8 +6,6 @@ from config import DB_CONFIG
 
 logger = logging.getLogger("pmaster.database")
 
-FAIL_COUNT_ESCALATE_THRESHOLD = 3
-
 # MySQL error 1054 "Unknown column" - dùng để nhận biết DB chưa chạy migration v2.
 ER_BAD_FIELD_ERROR = 1054
 _messages_has_rag_columns = True
@@ -101,10 +99,9 @@ def increment_fail_count(cursor, connection, conversation_id):
     )
     connection.commit()
     cursor.execute("SELECT fail_count FROM conversations WHERE id = %s", (conversation_id,))
-    fail_count = cursor.fetchone()["fail_count"]
-    if fail_count >= FAIL_COUNT_ESCALATE_THRESHOLD:
-        set_conversation_status(cursor, connection, conversation_id, "waiting_agent")
-    return fail_count
+    # Việc chuyển tư vấn viên khi đủ ngưỡng do chat_service/handover quyết định
+    # (còn phụ thuộc giờ trực), hàm này chỉ đếm.
+    return cursor.fetchone()["fail_count"]
 
 
 def reset_fail_count(cursor, connection, conversation_id):
@@ -128,11 +125,26 @@ def close_conversation(cursor, connection, conversation_id):
     connection.commit()
 
 
-def list_waiting_conversations(cursor):
+STAFF_SCOPES = ("waiting", "mine", "open")
+
+
+def list_waiting_conversations(cursor, scope="waiting", staff_id=None):
+    """Danh sách phiên cho Staff Dashboard.
+    waiting: đang chờ tư vấn viên | mine: đang do staff_id xử lý | open: cả hai."""
+    conditions = {
+        "waiting": ("c.status = 'waiting_agent'", ()),
+        "mine": ("c.status = 'agent' AND c.assigned_staff_id = %s", (staff_id,)),
+        "open": ("(c.status = 'waiting_agent' OR (c.status = 'agent' AND c.assigned_staff_id = %s))",
+                 (staff_id,)),
+    }
+    where, params = conditions[scope]
     cursor.execute(
-        "SELECT c.id, c.user_id, c.title, c.fail_count, c.created_at, u.username "
-        "FROM conversations c JOIN users u ON u.id = c.user_id "
-        "WHERE c.status = 'waiting_agent' ORDER BY c.created_at ASC"
+        "SELECT c.id, c.user_id, c.title, c.status, c.channel, c.fail_count, c.assigned_staff_id, "
+        "c.created_at, u.username, "
+        "(SELECT MAX(m.id) FROM messages m WHERE m.conversation_id = c.id) AS last_message_id "
+        f"FROM conversations c JOIN users u ON u.id = c.user_id WHERE {where} "
+        "ORDER BY c.created_at ASC",
+        params,
     )
     return cursor.fetchall()
 
@@ -175,8 +187,19 @@ def save_message(cursor, connection, conversation_id, sender_type, content, imag
 def get_conversation_messages(cursor, conversation_id):
     cursor.execute(
         "SELECT id, sender_type, content, image_url, created_at "
-        "FROM messages WHERE conversation_id = %s ORDER BY created_at ASC",
+        "FROM messages WHERE conversation_id = %s ORDER BY id ASC",
         (conversation_id,)
+    )
+    return cursor.fetchall()
+
+
+def get_messages_after(cursor, conversation_id, after_id=0, limit=200):
+    """Tin nhắn có id > after_id theo thứ tự thời gian - widget dùng để khôi
+    phục phiên và nhận tin tư vấn viên (polling). Không trả dữ liệu truy vết RAG."""
+    cursor.execute(
+        "SELECT id, sender_type, content, image_url, answer_status, created_at "
+        "FROM messages WHERE conversation_id = %s AND id > %s ORDER BY id ASC LIMIT %s",
+        (conversation_id, after_id, limit)
     )
     return cursor.fetchall()
 
@@ -323,3 +346,95 @@ def get_pending_clarification(cursor, conversation_id):
     if len(rows) == 2 and rows[0]["answer_status"] == "clarify" and rows[1]["sender_type"] == "user":
         return rows[1]["content"]
     return None
+
+
+# ============================================================
+# TICKET HỖ TRỢ NGOÀI GIỜ (handover.py - D1-09)
+# ============================================================
+TICKET_STATUSES = ("open", "in_progress", "resolved")
+
+
+def create_support_ticket(cursor, connection, *, conversation_id, user_id, full_name,
+                          email, phone, content):
+    cursor.execute(
+        "INSERT INTO support_tickets (conversation_id, user_id, full_name, email, phone, content) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (conversation_id, user_id, full_name, email, phone, content)
+    )
+    connection.commit()
+    return cursor.lastrowid
+
+
+def list_support_tickets(cursor, status=None, limit=100):
+    where, params = ("WHERE status = %s", (status,)) if status else ("", ())
+    cursor.execute(
+        "SELECT id, conversation_id, user_id, full_name, email, phone, content, status, "
+        "handled_by, created_at, updated_at FROM support_tickets "
+        f"{where} ORDER BY id DESC LIMIT %s",
+        params + (limit,)
+    )
+    return cursor.fetchall()
+
+
+def get_support_ticket(cursor, ticket_id):
+    cursor.execute("SELECT id, conversation_id, status FROM support_tickets WHERE id = %s",
+                   (ticket_id,))
+    return cursor.fetchone()
+
+
+def update_support_ticket_status(cursor, connection, ticket_id, status, staff_id):
+    cursor.execute(
+        "UPDATE support_tickets SET status = %s, handled_by = %s WHERE id = %s",
+        (status, staff_id, ticket_id)
+    )
+    connection.commit()
+
+
+# ============================================================
+# QUẢN TRỊ FAQ (routes/admin.py - D1-11)
+# ============================================================
+FAQ_EDITABLE_FIELDS = ("nhom_nghiep_vu", "intent", "cau_hoi_mau", "tra_loi_chuan")
+
+
+def list_faqs(cursor, include_inactive=False):
+    where = "" if include_inactive else "WHERE is_active = 1"
+    cursor.execute(
+        "SELECT id, nhom_nghiep_vu, intent, cau_hoi_mau, tra_loi_chuan, is_active, updated_at "
+        f"FROM faqs {where} ORDER BY id"
+    )
+    return cursor.fetchall()
+
+
+def get_faq(cursor, faq_id):
+    cursor.execute(
+        "SELECT id, nhom_nghiep_vu, intent, cau_hoi_mau, tra_loi_chuan, is_active, updated_at "
+        "FROM faqs WHERE id = %s",
+        (faq_id,)
+    )
+    return cursor.fetchone()
+
+
+def create_faq(cursor, connection, fields):
+    columns = [name for name in FAQ_EDITABLE_FIELDS if name in fields]
+    cursor.execute(
+        f"INSERT INTO faqs ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})",
+        tuple(fields[name] for name in columns)
+    )
+    connection.commit()
+    return cursor.lastrowid
+
+
+def update_faq(cursor, connection, faq_id, fields):
+    columns = [name for name in (*FAQ_EDITABLE_FIELDS, "is_active") if name in fields]
+    cursor.execute(
+        f"UPDATE faqs SET {', '.join(f'{name} = %s' for name in columns)} WHERE id = %s",
+        (*(fields[name] for name in columns), faq_id)
+    )
+    connection.commit()
+
+
+def get_last_message_id(cursor, conversation_id):
+    """Id tin nhắn mới nhất của phiên - widget dùng làm mốc khi hỏi tin mới (polling)."""
+    cursor.execute("SELECT COALESCE(MAX(id), 0) AS last_id FROM messages WHERE conversation_id = %s",
+                   (conversation_id,))
+    return cursor.fetchone()["last_id"]

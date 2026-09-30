@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Dashboard</title>
+<link rel="icon" href="/assets/favicon.png">
+<style>
+  :root { --blue:#0b59c8; --blue-dark:#0847a3; --navy:#032259; --ink:#16202e; --muted:#5b6678; --line:#e3e8f0; --soft:#f5f8fc; --ok:#16a34a; --warn:#b45309; --danger:#c62828; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--soft); font-size:14px; line-height:1.5; }
+  button { font:inherit; cursor:pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+  [hidden] { display:none !important; }
+  .topbar { height:56px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; padding:0 16px; }
+  .topbar img { height:28px; }
+  .topbar h1 { font-size:16px; margin:0; color:var(--navy); flex:1; }
+  .who { font-size:13px; color:var(--muted); }
+  .btn { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:8px; padding:7px 12px; }
+  .btn:hover { border-color:var(--blue); color:var(--blue); }
+  .btn.primary { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:600; }
+  .btn.primary:hover { background:var(--blue-dark); color:#fff; }
+  .btn.danger { color:var(--danger); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .bell { position:relative; }
+  .bell .count { position:absolute; top:-6px; right:-6px; background:var(--danger); color:#fff; border-radius:10px; font-size:11px; font-weight:700; min-width:18px; height:18px; display:grid; place-items:center; padding:0 4px; }
+  .notif-panel { position:absolute; top:52px; right:16px; width:340px; max-height:60vh; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.12); z-index:10; }
+  .notif-panel button { display:block; width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:#fff; padding:10px 12px; }
+  .notif-panel button:hover { background:var(--soft); }
+  .notif-panel small { color:var(--muted); display:block; }
+  .layout { display:grid; grid-template-columns:330px 1fr; height:calc(100% - 56px); }
+  aside { border-right:1px solid var(--line); background:#fff; display:flex; flex-direction:column; min-height:0; }
+  .tabs { display:flex; border-bottom:1px solid var(--line); }
+  .tabs button { flex:1; border:0; background:none; padding:11px 6px; color:var(--muted); font-weight:600; border-bottom:2px solid transparent; }
+  .tabs button[aria-selected="true"] { color:var(--blue); border-bottom-color:var(--blue); }
+  .tabs .n { display:inline-block; min-width:18px; padding:0 5px; border-radius:9px; background:#e8eef8; color:var(--navy); font-size:11px; margin-left:4px; }
+  .list { flex:1; overflow:auto; padding:8px; }
+  .item { display:block; width:100%; text-align:left; border:1px solid var(--line); background:#fff; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .item:hover, .item.active { border-color:var(--blue); }
+  .item.active { background:#f0f5fd; }
+  .item strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item small { color:var(--muted); }
+  .empty { color:var(--muted); text-align:center; padding:28px 12px; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; border-radius:10px; padding:1px 8px; }
+  .pill.waiting_agent, .pill.open { background:#fff4e0; color:var(--warn); }
+  .pill.agent, .pill.in_progress { background:#e6f6ec; color:var(--ok); }
+  .pill.closed, .pill.resolved, .pill.bot { background:#eef1f5; color:var(--muted); }
+  section.detail { display:flex; flex-direction:column; min-height:0; }
+  .detail-head { background:#fff; border-bottom:1px solid var(--line); padding:12px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .detail-head h2 { margin:0; font-size:16px; flex:1; min-width:200px; }
+  .detail-head small { display:block; color:var(--muted); font-weight:400; font-size:12px; }
+  .messages { flex:1; overflow:auto; padding:16px; }
+  .msg { max-width:72%; margin:0 0 12px; }
+  .msg .label { font-size:11px; color:var(--muted); margin:0 4px 2px; }
+  .msg .bubble { background:#fff; border:1px solid var(--line); border-radius:12px; padding:8px 12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .msg.user { margin-left:auto; }
+  .msg.user .bubble { background:#e9f1fd; border-color:#c6daf7; }
+  .msg.staff .bubble { background:#eaf7ef; border-color:#b8e0c5; }
+  .msg img { display:block; max-width:260px; border-radius:8px; margin-bottom:6px; }
+  .sys { text-align:center; color:var(--muted); font-size:12px; margin:6px 0 12px; }
+  .reply { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); background:#fff; }
+  .reply textarea { flex:1; border:1px solid var(--line); border-radius:10px; padding:9px 12px; font:inherit; resize:vertical; min-height:44px; max-height:160px; }
+  .placeholder { margin:auto; color:var(--muted); text-align:center; padding:40px; }
+  .login { max-width:380px; margin:10vh auto; background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px; }
+  .login img { height:34px; margin-bottom:14px; }
+  .login h1 { font-size:18px; margin:0 0 6px; color:var(--navy); }
+  .login p { color:var(--muted); margin:0 0 16px; font-size:13px; }
+  .login input { width:100%; border:1px solid var(--line); border-radius:8px; padding:9px 11px; font:inherit; margin-bottom:12px; }
+  .error { color:var(--danger); font-size:13px; margin:0 0 10px; }
+  .ticket { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#fff; }
+  .ticket p { margin:4px 0; white-space:pre-wrap; }
+  .ticket .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+  .ticket select { font:inherit; border:1px solid var(--line); border-radius:6px; padding:4px 6px; }
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; padding:12px 16px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.2); max-width:340px; z-index:20; }
+  @media (max-width:760px) { .layout { grid-template-columns:1fr; } aside { max-height:40vh; } .msg { max-width:90%; } }
+</style>
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <img src="/assets/sotatek-logo.png" alt="SOTATEK">
+  <h1>Staff Dashboard</h1>
+  <p>Nhập mã tư vấn viên (staff_id). Tạo tài khoản bằng <code>python create_staff.py &lt;username&gt;</code>.</p>
+  <form id="login-form">
+    <label for="staff-id">Mã tư vấn viên</label>
+    <input id="staff-id" type="number" min="1" required autocomplete="off">
+    <p class="error" id="login-error" role="alert" hidden></p>
+    <button class="btn primary" type="submit">Đăng nhập</button>
+  </form>
+</div>
+
+<div id="app" hidden style="height:100%">
+  <div class="topbar">
+    <img src="/assets/sotatek-mark.png" alt="">
+    <h1>Staff Dashboard · Trợ lý AI Python Master</h1>
+    <span class="who" id="who"></span>
+    <button class="btn bell" id="bell" type="button" aria-label="Thông báo" aria-haspopup="true">🔔<span class="count" id="bell-count" hidden></span></button>
+    <button class="btn" id="enable-notify" type="button">Bật thông báo trình duyệt</button>
+    <button class="btn" id="logout" type="button">Đăng xuất</button>
+  </div>
+  <div class="notif-panel" id="notif-panel" hidden></div>
+
+  <div class="layout">
+    <aside>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="waiting" aria-selected="true">Đang chờ<span class="n" id="n-waiting">0</span></button>
+        <button role="tab" data-tab="mine" aria-selected="false">Của tôi<span class="n" id="n-mine">0</span></button>
+        <button role="tab" data-tab="tickets" aria-selected="false">Ticket<span class="n" id="n-tickets">0</span></button>
+      </div>
+      <div class="list" id="list" aria-live="polite"></div>
+    </aside>
+
+    <section class="detail" id="detail">
+      <div class="placeholder" id="placeholder">Chọn một phiên chat ở cột bên trái để xem lịch sử và tiếp nhận.</div>
+      <div class="detail-head" id="detail-head" hidden>
+        <h2 id="detail-title"></h2>
+        <span class="pill" id="detail-status"></span>
+        <button class="btn primary" id="claim" type="button">Tiếp nhận</button>
+        <button class="btn danger" id="close" type="button">Đóng phiên</button>
+      </div>
+      <div class="messages" id="messages" hidden aria-live="polite"></div>
+      <form class="reply" id="reply-form" hidden>
+        <label for="reply-text" style="position:absolute;left:-9999px">Nội dung trả lời</label>
+        <textarea id="reply-text" placeholder="Nhập câu trả lời cho thí sinh… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+        <button class="btn primary" type="submit">Gửi</button>
+      </form>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var API = (new URLSearchParams(location.search).get("api") || location.origin).replace(/\/+$/, "");
+  var STORAGE_KEY = "pm-staff-id";
+  var LABELS = { user: "Thí sinh", model: "Trợ lý AI", bot: "Trợ lý AI", staff: "Tư vấn viên" };
+  var STATUS = { bot: "Bot", waiting_agent: "Đang chờ", agent: "Đang hỗ trợ", closed: "Đã đóng",
+                 open: "Mới", in_progress: "Đang xử lý", resolved: "Đã xong" };
+
+  var state = { staffId: null, tab: "waiting", current: null, lastId: 0, seenNotifications: {}, timers: [] };
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(text) {
+    return String(text == null ? "" : text).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function api(path, options) {
+    options = options || {};
+    var headers = { "X-Staff-Id": String(state.staffId) };
+    if (options.json) headers["Content-Type"] = "application/json";
+    return fetch(API + path, { method: options.method || "GET", headers: headers,
+                               body: options.json ? JSON.stringify(options.json) : undefined })
+      .catch(function () { throw new Error("Không kết nối được máy chủ."); })
+      .then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok) throw new Error(data.error || ("Lỗi " + response.status));
+          return data;
+        });
+      });
+  }
+
+  var toastTimer;
+  function toast(text) {
+    $("toast").textContent = text;
+    $("toast").hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $("toast").hidden = true; }, 5000);
+  }
+
+  function beep() {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.frequency.value = 880; gain.gain.value = 0.08;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.25);
+    } catch (e) { /* trình duyệt chặn âm thanh khi chưa tương tác */ }
+  }
+
+  // ---- đăng nhập ------------------------------------------------------------
+  function showLogin(message) {
+    $("app").hidden = true;
+    $("login").hidden = false;
+    $("login-error").hidden = !message;
+    $("login-error").textContent = message || "";
+  }
+
+  function login(staffId) {
+    state.staffId = staffId;
+    return api("/api/staff/notifications").then(function () {
+      localStorage.setItem(STORAGE_KEY, String(staffId));
+      $("login").hidden = true;
+      $("app").hidden = false;
+      $("who").textContent = "Tư vấn viên #" + staffId;
+      startTimers();
+    }).catch(function (error) {
+      localStorage.removeItem(STORAGE_KEY);
+      showLogin(error.message);
+    });
+  }
+
+  $("login-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    login(parseInt($("staff-id").value, 10));
+  });
+
+  $("logout").addEventListener("click", function () {
+    localStorage.removeItem(STORAGE_KEY);
+    state.timers.forEach(clearInterval);
+    state.timers = [];
+    showLogin("");
+  });
+
+  // ---- danh sách -------------------------------------------------------------
+  function selectTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll("[data-tab]").forEach(function (button) {
+      button.setAttribute("aria-selected", String(button.getAttribute("data-tab") === tab));
+    });
+    refreshList();
+  }
+
+  document.querySelectorAll("[data-tab]").forEach(function (button) {
+    button.addEventListener("click", function () { selectTab(button.getAttribute("data-tab")); });
+  });
+
+  function refreshCounts() {
+    return Promise.all([
+      api("/api/staff/conversations?scope=waiting"),
+      api("/api/staff/conversations?scope=mine"),
+      api("/api/staff/tickets?status=open"),
+    ]).then(function (results) {
+      $("n-waiting").textContent = results[0].conversations.length;
+      $("n-mine").textContent = results[1].conversations.length;
+      $("n-tickets").textContent = results[2].tickets.length;
+      return results;
+    });
+  }
+
+  function refreshList() {
+    return refreshCounts().then(function (results) {
+      if (state.tab === "tickets") return renderTickets();
+      var conversations = results[state.tab === "waiting" ? 0 : 1].conversations;
+      var list = $("list");
+      if (!conversations.length) {
+        list.innerHTML = '<div class="empty">' + (state.tab === "waiting"
+          ? "Không có phiên nào đang chờ." : "Bạn chưa tiếp nhận phiên nào.") + "</div>";
+        return;
+      }
+      list.innerHTML = "";
+      conversations.forEach(function (c) {
+        var item = document.createElement("button");
+        item.type = "button";
+        item.className = "item" + (state.current === c.id ? " active" : "");
+        item.innerHTML = "<strong>#" + c.id + " · " + escapeHtml(c.title) + "</strong>" +
+          '<small><span class="pill ' + c.status + '">' + STATUS[c.status] + "</span> · " +
+          escapeHtml(c.channel) + " · " + escapeHtml(c.created_at) +
+          (c.fail_count ? " · AI thất bại " + c.fail_count + " lần" : "") + "</small>";
+        item.addEventListener("click", function () { openConversation(c.id); });
+        list.appendChild(item);
+      });
+    }).catch(function (error) { toast(error.message); });
+  }
+
+  function renderTickets() {
+    return api("/api/staff/tickets").then(function (data) {
+      var list = $("list");
+      if (!data.tickets.length) { list.innerHTML = '<div class="empty">Chưa có ticket nào.</div>'; return; }
+      list.innerHTML = "";
+      data.tickets.forEach(function (t) {
+        var card = document.createElement("div");
+        card.className = "ticket";
+        card.innerHTML = "<strong>#" + t.id + " · " + escapeHtml(t.full_name) + "</strong> " +
+          '<span class="pill ' + t.status + '">' + STATUS[t.status] + "</span>" +
+          "<p>" + escapeHtml([t.email, t.phone].filter(Boolean).join(" · ")) + "</p>" +
+          "<p>" + escapeHtml(t.content) + "</p><small>" + escapeHtml(t.created_at) + "</small>" +
+          '<div class="row"><select aria-label="Trạng thái ticket">' +
+          ["open", "in_progress", "resolved"].map(function (s) {
+            return '<option value="' + s + '"' + (s === t.status ? " selected" : "") + ">" + STATUS[s] + "</option>";
+          }).join("") + '</select><button class="btn" type="button">Xem phiên #' + t.conversation_id + "</button></div>";
+        card.querySelector("select").addEventListener("change", function (event) {
+          api("/api/staff/tickets/" + t.id + "/status", { method: "POST", json: { status: event.target.value } })
+            .then(function () { toast("Đã cập nhật ticket #" + t.id); refreshCounts(); })
+            .catch(function (error) { toast(error.message); });
+        });
+        card.querySelector("button").addEventListener("click", function () { openConversation(t.conversation_id); });
+        list.appendChild(card);
+      });
+    });
+  }
+
+  // ---- chi tiết phiên ---------------------------------------------------------
+  function renderMessage(m) {
+    var box = $("messages");
+    if (m.sender_type === "system") {
+      var sys = document.createElement("div");
+      sys.className = "sys";
+      sys.textContent = m.content;
+      box.appendChild(sys);
+      return;
+    }
+    var div = document.createElement("div");
+    div.className = "msg " + (m.sender_type === "model" ? "bot" : m.sender_type);
+    var image = m.image_url ? '<img src="' + escapeHtml(API + m.image_url) + '" alt="Ảnh thí sinh gửi">' : "";
+    div.innerHTML = '<div class="label">' + LABELS[m.sender_type] + " · " + escapeHtml(m.created_at) + "</div>" +
+      '<div class="bubble">' + image + escapeHtml(m.content) + "</div>";
+    box.appendChild(div);
+  }
+
+  function renderDetail(conversation) {
+    var mine = conversation.status === "agent" && conversation.assigned_staff_id === state.staffId;
+    $("placeholder").hidden = true;
+    $("detail-head").hidden = false;
+    $("messages").hidden = false;
+    $("detail-title").innerHTML = "Phiên #" + conversation.id + "<small>Thí sinh #" + conversation.user_id +
+      " · bắt đầu " + escapeHtml(conversation.created_at) + " · AI thất bại " + conversation.fail_count + " lần</small>";
+    $("detail-status").className = "pill " + conversation.status;
+    $("detail-status").textContent = STATUS[conversation.status];
+    $("claim").hidden = conversation.status !== "waiting_agent";
+    $("close").hidden = conversation.status === "closed";
+    $("reply-form").hidden = !mine;
+  }
+
+  function openConversation(id) {
+    state.current = id;
+    state.lastId = 0;
+    $("messages").innerHTML = "";
+    return loadMessages().then(function () {
+      document.querySelectorAll(".item").forEach(function (item) { item.classList.remove("active"); });
+      markNotificationsRead(id);
+    });
+  }
+
+  function loadMessages() {
+    if (!state.current) return Promise.resolve();
+    var id = state.current;
+    return api("/api/staff/conversations/" + id + "/messages").then(function (data) {
+      if (state.current !== id) return;
+      renderDetail(data.conversation);
+      var box = $("messages");
+      var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+      data.messages.forEach(function (m) {
+        if (m.id > state.lastId) { renderMessage(m); state.lastId = m.id; }
+      });
+      if (atBottom || !box.dataset.loaded) box.scrollTop = box.scrollHeight;
+      box.dataset.loaded = "1";
+    }).catch(function (error) { toast(error.message); });
+  }
+
+  $("claim").addEventListener("click", function () {
+    api("/api/staff/conversations/" + state.current + "/claim", { method: "POST", json: { staff_id: state.staffId } })
+      .then(function () { toast("Đã tiếp nhận phiên #" + state.current); loadMessages(); selectTab("mine"); })
+      .catch(function (error) { toast(error.message); loadMessages(); });
+  });
+
+  $("close").addEventListener("click", function () {
+    if (!confirm("Đóng phiên #" + state.current + "? Thí sinh sẽ quay lại trò chuyện với trợ lý AI.")) return;
+    api("/api/staff/conversations/" + state.current + "/close", { method: "POST", json: { staff_id: state.staffId } })
+      .then(function () { toast("Đã đóng phiên #" + state.current); loadMessages(); refreshList(); })
+      .catch(function (error) { toast(error.message); });
+  });
+
+  function sendReply() {
+    var text = $("reply-text").value.trim();
+    if (!text) return;
+    api("/api/staff/conversations/" + state.current + "/reply", { method: "POST", json: { staff_id: state.staffId, message: text } })
+      .then(function () { $("reply-text").value = ""; loadMessages(); })
+      .catch(function (error) { toast(error.message); });
+  }
+
+  $("reply-form").addEventListener("submit", function (event) { event.preventDefault(); sendReply(); });
+  $("reply-text").addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendReply(); }
+  });
+
+  // ---- thông báo (In-app + trình duyệt) -------------------------------------------------
+  function markNotificationsRead(conversationId) {
+    Object.keys(state.seenNotifications).forEach(function (key) {
+      var n = state.seenNotifications[key];
+      if (n.conversation_id === conversationId && !n.read) {
+        n.read = true;
+        api("/api/staff/notifications/" + n.id + "/read", { method: "POST", json: { staff_id: state.staffId } })
+          .then(pollNotifications);
+      }
+    });
+  }
+
+  function pollNotifications() {
+    return api("/api/staff/notifications").then(function (data) {
+      var fresh = data.notifications.filter(function (n) { return !state.seenNotifications[n.id]; });
+      data.notifications.forEach(function (n) { state.seenNotifications[n.id] = state.seenNotifications[n.id] || n; });
+      $("bell-count").hidden = !data.notifications.length;
+      $("bell-count").textContent = data.notifications.length;
+      $("notif-panel").innerHTML = data.notifications.length ? "" : '<div class="empty">Không có thông báo mới.</div>';
+      data.notifications.forEach(function (n) {
+        var item = document.createElement("button");
+        item.type = "button";
+        item.innerHTML = "Phiên #" + n.conversation_id + ": " + escapeHtml(n.reason) + "<small>" + escapeHtml(n.created_at) + "</small>";
+        item.addEventListener("click", function () { $("notif-panel").hidden = true; openConversation(n.conversation_id); });
+        $("notif-panel").appendChild(item);
+      });
+      if (fresh.length && state.notifiedOnce) {
+        beep();
+        toast("Có " + fresh.length + " yêu cầu hỗ trợ mới: " + fresh[0].reason);
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Python Master · Yêu cầu tư vấn mới", { body: "Phiên #" + fresh[0].conversation_id + ": " + fresh[0].reason });
+        }
+        refreshList();
+      }
+      state.notifiedOnce = true;
+    }).catch(function () { /* thử lại ở lần sau */ });
+  }
+
+  $("bell").addEventListener("click", function () { $("notif-panel").hidden = !$("notif-panel").hidden; });
+  $("enable-notify").addEventListener("click", function () {
+    if (!("Notification" in window)) { toast("Trình duyệt không hỗ trợ thông báo."); return; }
+    Notification.requestPermission().then(function (permission) {
+      toast(permission === "granted" ? "Đã bật thông báo trình duyệt." : "Thông báo trình duyệt đang bị chặn.");
+    });
+  });
+
+  function startTimers() {
+    refreshList();
+    pollNotifications();
+    state.timers.push(setInterval(pollNotifications, 5000));
+    state.timers.push(setInterval(function () { if (state.tab !== "tickets") refreshList(); else refreshCounts(); }, 7000));
+    state.timers.push(setInterval(loadMessages, 3000));
+  }
+
+  var saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+  if (saved) login(saved); else showLogin("");
+})();
+</script>
+</body>
+</html>

@@ -16,3 +16,15 @@ Bản này không tự tạo hệ thống đăng nhập staff, email notificatio
 
 ## Bảo mật
 File `.env` chứa API key/mật khẩu đã được loại khỏi gói bàn giao. Hãy tạo `.env` từ `.env.example` và đặt key thật ở máy chạy ứng dụng.
+
+## Widget & hoàn thiện Module D1 (09/2026)
+Hướng dẫn đầy đủ: `docs/HUONG_DAN_SU_DUNG_WIDGET.md`.
+- Widget nhúng 1 dòng `widget.js` (Shadow DOM, responsive): lời chào + FAQ gợi ý, markdown/khối code, gửi ảnh có
+  preview, hỏi lại kèm nút chọn nhanh, gặp tư vấn viên, form ticket ngoài giờ, lịch sử, tải .txt/PDF.
+- Staff Dashboard `/staff` (hàng chờ, tiếp nhận, trả lời, đóng phiên, ticket, thông báo) và trang quản trị
+  `/admin` (FAQ CRUD, tài liệu Knowledge Base, báo cáo + xuất Excel).
+- `guardrails.py`: câu từ chối chuẩn BA, danh mục từ khoá cấm `data/banned_keywords.txt`, chặn rò rỉ KB/cấu
+  hình/dữ liệu người khác, chặn câu ngoài phạm vi rõ ràng.
+- `track_advisor.py`: xác định Bảng A/B theo tuổi/năm sinh/cấp học, hỏi lại khi thiếu (sửa độ tuổi Bảng A 13–18).
+- `handover.py`: giờ trực, ticket ngoài giờ, email thông báo tư vấn viên; chặn 2 nhân viên cùng nhận 1 phiên.
+- Sửa ô dữ liệu lỗi trong `danh_sach_faq.xlsx` cho khớp bảng BA.

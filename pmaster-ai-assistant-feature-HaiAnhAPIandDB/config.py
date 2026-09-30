@@ -212,3 +212,47 @@ ZALO_OA_ID = os.getenv('ZALO_OA_ID', '')
 # AI chạy nền (Messenger/Zalo sẽ gửi lại nếu không nhận 200 trong vài giây).
 CHANNEL_WORKERS = int(os.getenv('CHANNEL_WORKERS', '4'))
 CHANNEL_HTTP_TIMEOUT_SECONDS = float(os.getenv('CHANNEL_HTTP_TIMEOUT_SECONDS', '10'))
+
+# ============================================================
+# MODULE NGHIỆP VỤ CUỘC THI (track_advisor.py - xác định Bảng A/B, D1-06)
+# Nguồn: bảng "Xác định câu hỏi và tình huống" của BA (Bảng A 13-18 tuổi,
+# THCS/THPT; Bảng B 19-24 tuổi, ĐH/CĐ). Tuổi tính theo năm: năm thi - năm sinh.
+# ============================================================
+COMPETITION_YEAR = int(os.getenv('COMPETITION_YEAR', '2026'))
+TRACK_A_MIN_AGE = int(os.getenv('TRACK_A_MIN_AGE', '13'))
+TRACK_A_MAX_AGE = int(os.getenv('TRACK_A_MAX_AGE', '18'))
+TRACK_B_MIN_AGE = int(os.getenv('TRACK_B_MIN_AGE', '19'))
+TRACK_B_MAX_AGE = int(os.getenv('TRACK_B_MAX_AGE', '24'))
+
+# Thông tin liên hệ chính thức, chèn vào câu trả lời khi AI không có dữ liệu
+# (D1-10) và khi ngoài giờ trực (D1-09).
+SUPPORT_CONTACT_TEXT = os.getenv(
+    'SUPPORT_CONTACT_TEXT',
+    'Email: info@pythonmaster.vn · Hotline: 0347 314 969 / 0354 549 889',
+)
+
+# ============================================================
+# MODULE HANDOVER (handover.py - D1-09)
+# ============================================================
+# Giờ trực của tư vấn viên, dạng "HH:MM-HH:MM". Để trống = luôn có người trực
+# (mọi yêu cầu chuyển thẳng vào hàng chờ). Ngoài giờ: widget hiện form để lại
+# thông tin (support_tickets) thay vì bắt thí sinh chờ vô thời hạn.
+SUPPORT_HOURS = os.getenv('SUPPORT_HOURS', '').strip()
+# Các ngày làm việc, 1 = Thứ Hai ... 7 = Chủ Nhật, dạng "1-5" hoặc "1,2,3,4,5,6".
+SUPPORT_DAYS = os.getenv('SUPPORT_DAYS', '1-7').strip()
+# Múi giờ của giờ trực, tính bằng giờ lệch so với UTC (Việt Nam = 7, không có
+# giờ mùa hè nên không cần thư viện múi giờ - chạy được cả trên Windows).
+SUPPORT_UTC_OFFSET_HOURS = float(os.getenv('SUPPORT_UTC_OFFSET_HOURS', '7'))
+
+# Thông báo email cho nhân viên trực khi có yêu cầu gặp tư vấn viên / ticket
+# mới. Để trống SMTP_HOST hoặc STAFF_NOTIFY_EMAILS = tắt email (vẫn có thông
+# báo trong Staff Dashboard).
+SMTP_HOST = os.getenv('SMTP_HOST', '').strip()
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_USER = os.getenv('SMTP_USER', '')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'true').lower() in ('1', 'true', 'yes')
+SMTP_FROM = os.getenv('SMTP_FROM', '') or SMTP_USER
+STAFF_NOTIFY_EMAILS = [e.strip() for e in os.getenv('STAFF_NOTIFY_EMAILS', '').split(',') if e.strip()]
+# Đường dẫn Staff Dashboard ghi trong email thông báo.
+STAFF_DASHBOARD_URL = os.getenv('STAFF_DASHBOARD_URL', 'http://localhost:5000/staff')

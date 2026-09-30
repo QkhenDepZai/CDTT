@@ -12,6 +12,9 @@ from database import (
     get_conversation,
     get_faq_suggestions,
     get_faq_by_id,
+    get_last_message_id,
+    get_messages_after,
+    get_user_conversation,
     list_user_conversations,
 )
 from image_handler import validate_image, save_image, build_image_url, prepare_image_for_gemini
@@ -19,6 +22,7 @@ from security import get_request_user_token, issue_user_token, verify_user_token
 from rag_service import ImageInput
 from config import ENFORCE_USER_TOKEN
 import chat_service
+import handover
 from chat_service import GREETING_TEXT
 
 chat_bp = Blueprint('chat', __name__)
@@ -68,6 +72,19 @@ logger = logging.getLogger("pmaster.routes.chat")
 SERVER_ERROR = ({"error": "Lỗi hệ thống, vui lòng thử lại sau."}, 500)
 
 
+def _support_info():
+    return {"hours": handover.support_hours_label(),
+            "available": handover.is_within_support_hours()}
+
+
+def _positive_int(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
 def _server_error(context):
     # Ghi chi tiết vào log, KHÔNG trả str(exception) ra ngoài (có thể lộ SQL/cấu hình).
     logger.exception("[Chat] Lỗi xử lý %s", context)
@@ -97,6 +114,7 @@ def chat_init():
 
             save_message(cursor, connection, conversation_id, 'system', GREETING_TEXT)
             faqs = get_faq_suggestions(cursor, limit=5)
+            last_message_id = get_last_message_id(cursor, conversation_id)
 
         return jsonify({
             "status": "success",
@@ -104,6 +122,8 @@ def chat_init():
             "conversation_id": conversation_id,
             "greeting": GREETING_TEXT,
             "faq_suggestions": faqs,
+            "support": _support_info(),
+            "last_message_id": last_message_id,
         })
     except Exception:  # noqa: BLE001
         return _server_error("chat_init")
@@ -157,14 +177,22 @@ def chat_faq_direct(faq_id):
                 cursor, connection, conversation_id, user_id,
                 title=faq["intent"] or "Đoạn chat mới", site_id=site_id,
             )
-            reply = chat_service.answer_faq(cursor, connection, conversation["id"], faq)
+            if conversation["status"] in ("waiting_agent", "agent"):
+                # Đang gặp tư vấn viên: bot không tự trả lời (TC-HANDOVER-13).
+                payload = chat_service.process_message(
+                    cursor, connection, conversation=conversation, user_id=user_id,
+                    text=f"[Chọn FAQ] {faq['intent']}",
+                )
+            else:
+                reply = chat_service.answer_faq(cursor, connection, conversation["id"], faq)
+                payload = {"reply": reply, "used_faq": True, "answer_status": "faq"}
+            payload["last_message_id"] = get_last_message_id(cursor, conversation["id"])
 
         return jsonify({
             "status": "success",
             "user_id": user_id,
             "conversation_id": conversation["id"],
-            "reply": reply,
-            "used_faq": True,
+            **payload,
         })
     except Exception:  # noqa: BLE001
         return _server_error("chat_faq_direct")
@@ -179,6 +207,7 @@ def chat_faq_direct(faq_id):
 def chat_request_agent():
     data = request.get_json(silent=True) or {}
     conversation_id = data.get("conversation_id")
+    user_id = data.get("user_id")
 
     if not conversation_id:
         return jsonify({"error": "Thiếu conversation_id"}), 400
@@ -187,17 +216,102 @@ def chat_request_agent():
     try:
         with connection.cursor() as cursor:
             conversation = get_conversation(cursor, conversation_id)
-            if not conversation:
+            if not conversation or (user_id and str(conversation["user_id"]) != str(user_id)):
                 return jsonify({"error": "Không tìm thấy phiên chat"}), 404
-            message = chat_service.request_agent(cursor, connection, conversation_id)
+
+            if conversation["status"] in ("waiting_agent", "agent"):
+                # Đã ở hàng chờ/đang được hỗ trợ: không tạo thêm thông báo trùng.
+                message = (chat_service.WAITING_AGENT_MESSAGE
+                           if conversation["status"] == "waiting_agent"
+                           else chat_service.AGENT_HANDLING_MESSAGE)
+                mode, status = handover.LIVE, conversation["status"]
+            else:
+                result = chat_service.request_agent(cursor, connection, conversation["id"])
+                message, mode = result.message, result.mode
+                status = "bot" if result.after_hours else "waiting_agent"
+            last_message_id = get_last_message_id(cursor, conversation["id"])
 
         return jsonify({
             "status": "success",
-            "conversation_id": conversation_id,
+            "conversation_id": conversation["id"],
             "message": message,
+            "handover_mode": mode,
+            "after_hours": mode == handover.AFTER_HOURS,
+            "conversation_status": status,
+            "support": _support_info(),
+            "last_message_id": last_message_id,
         })
     except Exception:  # noqa: BLE001
         return _server_error("chat_request_agent")
+    finally:
+        connection.close()
+
+
+# ============================================================
+# 2b'. ĐỂ LẠI THÔNG TIN HỖ TRỢ (ngoài giờ trực) - TC-HANDOVER-08/09
+# ============================================================
+@chat_bp.route('/api/chat/tickets', methods=['POST'])
+def chat_create_ticket():
+    data = request.get_json(silent=True) or {}
+    conversation_id = _positive_int(data.get("conversation_id"))
+    user_id = _positive_int(data.get("user_id"))
+    if not conversation_id or not user_id:
+        return jsonify({"error": "Thiếu user_id hoặc conversation_id"}), 400
+
+    ticket, error = handover.validate_ticket(data)
+    if error:
+        return jsonify({"error": error}), 400
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            if not get_user_conversation(cursor, user_id, conversation_id):
+                return jsonify({"error": "Không tìm thấy phiên chat"}), 404
+            ticket_id = handover.open_ticket(cursor, connection, conversation_id, user_id, ticket)
+            last_message_id = get_last_message_id(cursor, conversation_id)
+        return jsonify({
+            "status": "success",
+            "ticket_id": ticket_id,
+            "last_message_id": last_message_id,
+            "message": ("Đã ghi nhận yêu cầu hỗ trợ của bạn. Tư vấn viên sẽ liên hệ lại "
+                        "trong giờ làm việc."),
+        }), 201
+    except Exception:  # noqa: BLE001
+        return _server_error("chat_create_ticket")
+    finally:
+        connection.close()
+
+
+# ============================================================
+# 2b''. TIN NHẮN CỦA 1 PHIÊN - widget khôi phục phiên & nhận tin tư vấn viên
+# ============================================================
+@chat_bp.route('/api/chat/conversations/<int:conversation_id>/messages', methods=['GET'])
+def chat_conversation_messages(conversation_id):
+    """GET ?user_id=..&after_id=.. (header X-User-Token). Luôn bắt buộc
+    user_token: đây là API ĐỌC dữ liệu hội thoại (D1-13)."""
+    user_id = _positive_int(request.args.get("user_id"))
+    after_id = _positive_int(request.args.get("after_id")) or 0
+    if not user_id or not verify_user_token(user_id, get_request_user_token()):
+        return jsonify({"error": "Không có quyền xem phiên chat này (thiếu hoặc sai user_token)."}), 403
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            conversation = get_user_conversation(cursor, user_id, conversation_id)
+            if not conversation:
+                return jsonify({"error": "Không tìm thấy phiên chat"}), 404
+            messages = get_messages_after(cursor, conversation_id, after_id)
+        return jsonify({
+            "status": "success",
+            "conversation": {"id": conversation["id"], "title": conversation["title"],
+                             "status": conversation["status"]},
+            "messages": [
+                {**m, "created_at": m["created_at"].isoformat(sep=" ") if m["created_at"] else None}
+                for m in messages
+            ],
+        })
+    except Exception:  # noqa: BLE001
+        return _server_error("chat_conversation_messages")
     finally:
         connection.close()
 
@@ -228,6 +342,7 @@ def chat_endpoint():
                 cursor, connection, conversation=conversation, user_id=user_id,
                 text=user_message,
             )
+            payload["last_message_id"] = get_last_message_id(cursor, conversation["id"])
         return jsonify({
             "status": "success",
             "user_id": user_id,
@@ -281,6 +396,7 @@ def chat_image_endpoint():
                 text=user_message, image=ImageInput(resized_bytes, resized_mime),
                 image_url=image_url,
             )
+            payload["last_message_id"] = get_last_message_id(cursor, conversation["id"])
         return jsonify({
             "status": "success",
             "user_id": user_id,

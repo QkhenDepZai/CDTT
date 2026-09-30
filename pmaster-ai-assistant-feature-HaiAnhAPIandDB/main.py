@@ -51,7 +51,8 @@ def check_config() -> list[str]:
 def warn_optional_config():
     """Thiếu các khoá này KHÔNG chặn chatbot, nhưng tắt tính năng liên quan."""
     if len(APP_SECRET_KEY) < 32:
-        logger.warning("APP_SECRET_KEY chưa đặt hoặc < 32 ký tự: không cấp được user_token, "
+        logger.warning("APP_SECRET_KEY chưa đặt hoặc < 32 ký tự: không cấp được user_token -> "
+                       "widget không khôi phục phiên, không nhận tin tư vấn viên; "
                        "API /api/history/* sẽ từ chối mọi yêu cầu.")
         if ENFORCE_USER_TOKEN:
             logger.warning("ENFORCE_USER_TOKEN=true nhưng thiếu APP_SECRET_KEY: người dùng cũ "
@@ -59,6 +60,9 @@ def warn_optional_config():
     if len(ADMIN_API_KEY) < 16:
         logger.warning("ADMIN_API_KEY chưa đặt hoặc < 16 ký tự: API quản trị /api/knowledge/* "
                        "đang bị khoá (chỉ quản trị được qua manage_knowledge.py).")
+
+    import handover
+    logger.info("Giờ trực tư vấn viên: %s.", handover.support_hours_label())
 
     from channels.registry import channel_status
     for channel, enabled in channel_status().items():

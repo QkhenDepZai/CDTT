@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản trị Chatbot</title>
+<link rel="icon" href="/assets/favicon.png">
+<style>
+  :root { --blue:#0b59c8; --blue-dark:#0847a3; --navy:#032259; --ink:#16202e; --muted:#5b6678; --line:#e3e8f0; --soft:#f5f8fc; --danger:#c62828; --ok:#16a34a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--soft); font-size:14px; line-height:1.5; }
+  button, input, select, textarea { font:inherit; }
+  button { cursor:pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+  [hidden] { display:none !important; }
+  .topbar { background:#fff; border-bottom:1px solid var(--line); height:56px; display:flex; align-items:center; gap:14px; padding:0 16px; }
+  .topbar img { height:28px; }
+  .topbar h1 { margin:0; font-size:16px; color:var(--navy); flex:1; }
+  nav.tabs { background:#fff; border-bottom:1px solid var(--line); padding:0 16px; display:flex; gap:4px; overflow-x:auto; }
+  nav.tabs button { border:0; background:none; padding:12px 14px; color:var(--muted); font-weight:600; border-bottom:2px solid transparent; white-space:nowrap; }
+  nav.tabs button[aria-selected="true"] { color:var(--blue); border-bottom-color:var(--blue); }
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 60px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:16px; color:var(--navy); }
+  .btn { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:8px; padding:7px 12px; }
+  .btn:hover { border-color:var(--blue); color:var(--blue); }
+  .btn.primary { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:600; }
+  .btn.primary:hover { background:var(--blue-dark); color:#fff; }
+  .btn.small { padding:3px 9px; font-size:12.5px; }
+  .btn.danger { color:var(--danger); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  label { display:block; font-size:12.5px; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=password], input[type=date], input[type=search], select, textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--ink); background:#fff; }
+  textarea { min-height:90px; resize:vertical; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .row > div { flex:1; min-width:160px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; background:var(--soft); position:sticky; top:0; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .clip { max-width:420px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .table-wrap { max-height:560px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; border-radius:10px; padding:1px 8px; background:#eef1f5; color:var(--muted); }
+  .pill.ready, .pill.on { background:#e6f6ec; color:var(--ok); }
+  .pill.failed { background:#fdecec; color:var(--danger); }
+  .msg { margin-top:10px; font-size:13px; }
+  .msg.error { color:var(--danger); } .msg.ok { color:var(--ok); }
+  .login { max-width:400px; margin:12vh auto; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .tile { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .tile span { display:block; font-size:12px; color:var(--muted); }
+  .tile strong { font-size:26px; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .chart { position:relative; }
+  .chart svg { width:100%; height:260px; display:block; }
+  .chart .bar { fill:var(--blue); }
+  .chart .bar:hover, .chart .bar.hover { fill:var(--navy); }
+  .chart .hit { fill:transparent; }
+  .chart .grid { stroke:#e9edf3; stroke-width:1; }
+  .chart .axis-label { fill:var(--muted); font-size:11px; }
+  .tooltip { position:absolute; pointer-events:none; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.12); padding:8px 10px; font-size:12px; min-width:170px; }
+  .tooltip b { display:block; margin-bottom:4px; }
+  .tooltip div { display:flex; justify-content:space-between; gap:12px; }
+  .search-result { border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; white-space:pre-wrap; font-size:13px; }
+  .search-result small { color:var(--muted); display:block; margin-bottom:4px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="card login" hidden>
+  <img src="/assets/sotatek-logo.png" alt="SOTATEK" style="height:34px">
+  <h2 style="margin-top:14px">Quản trị Chatbot Python Master</h2>
+  <p style="color:var(--muted);font-size:13px">Nhập <code>ADMIN_API_KEY</code> đã cấu hình trong file <code>.env</code> của backend. Khoá chỉ lưu trong tab trình duyệt hiện tại.</p>
+  <form id="login-form">
+    <label for="admin-key">Admin key</label>
+    <input id="admin-key" type="password" required autocomplete="off">
+    <p class="msg error" id="login-error" role="alert" hidden></p>
+    <button class="btn primary" type="submit" style="margin-top:12px">Đăng nhập</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <div class="topbar">
+    <img src="/assets/sotatek-mark.png" alt="">
+    <h1>Quản trị Chatbot · Python Master 2026</h1>
+    <a class="btn" href="/demo" target="_blank" rel="noopener">Mở trang demo</a>
+    <button class="btn" id="logout" type="button">Đăng xuất</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="faq" aria-selected="true">FAQ (Hỏi – Đáp)</button>
+    <button role="tab" data-tab="docs" aria-selected="false">Tài liệu tri thức</button>
+    <button role="tab" data-tab="reports" aria-selected="false">Báo cáo</button>
+  </nav>
+
+  <main>
+    <!-- ================= FAQ ================= -->
+    <section data-panel="faq">
+      <div class="card">
+        <h2 id="faq-form-title">Thêm FAQ mới</h2>
+        <form id="faq-form">
+          <input type="hidden" name="id">
+          <div class="row">
+            <div><label for="f-group">Nhóm nghiệp vụ</label><input id="f-group" name="nhom_nghiep_vu" type="text" maxlength="100" placeholder="Thông tin kỳ thi"></div>
+            <div><label for="f-intent">Intent / chủ đề *</label><input id="f-intent" name="intent" type="text" maxlength="150" required placeholder="Đối tượng Bảng A"></div>
+          </div>
+          <label for="f-questions">Câu hỏi mẫu * (mỗi câu 1 dòng, bắt đầu bằng "- ")</label>
+          <textarea id="f-questions" name="cau_hoi_mau" required placeholder="- Bảng A dành cho ai?&#10;- Học sinh cấp 3 có được thi Bảng A không?"></textarea>
+          <label for="f-answer">Câu trả lời chuẩn *</label>
+          <textarea id="f-answer" name="tra_loi_chuan" required style="min-height:120px"></textarea>
+          <div class="row" style="margin-top:12px">
+            <div style="flex:none"><button class="btn primary" type="submit" id="faq-submit">Lưu FAQ</button></div>
+            <div style="flex:none"><button class="btn" type="button" id="faq-cancel" hidden>Huỷ sửa</button></div>
+          </div>
+          <p class="msg" id="faq-msg" role="status"></p>
+        </form>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:10px">
+          <div><h2 style="margin:0">Danh sách FAQ <span id="faq-count" class="pill"></span></h2></div>
+          <div style="max-width:320px"><label for="faq-search" style="margin-top:0">Tìm kiếm</label><input id="faq-search" type="search" placeholder="Lọc theo intent, câu hỏi, câu trả lời"></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Nhóm / Intent</th><th>Câu hỏi mẫu</th><th>Câu trả lời chuẩn</th><th></th></tr></thead>
+          <tbody id="faq-rows"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- ================= TÀI LIỆU ================= -->
+    <section data-panel="docs" hidden>
+      <div class="card">
+        <h2>Tải lên tài liệu (PDF, Word .docx, TXT, Markdown, CSV)</h2>
+        <form id="upload-form">
+          <div class="row">
+            <div><label for="u-file">File *</label><input id="u-file" name="file" type="file" accept=".pdf,.docx,.txt,.md,.csv" required></div>
+            <div><label for="u-title">Tiêu đề</label><input id="u-title" name="title" type="text" maxlength="255" placeholder="Thể lệ Python Master 2026"></div>
+            <div><label for="u-category">Danh mục</label><input id="u-category" name="category" type="text" maxlength="100" placeholder="the_le"></div>
+            <div style="flex:none"><button class="btn primary" type="submit">Tải lên & xử lý</button></div>
+          </div>
+          <p class="msg" id="upload-msg" role="status"></p>
+        </form>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:10px">
+          <div><h2 style="margin:0">Tài liệu trong Knowledge Base</h2></div>
+          <div style="flex:none"><button class="btn" id="sync-faq" type="button">Đồng bộ FAQ → Knowledge Base</button></div>
+          <div style="flex:none"><button class="btn" id="reload-docs" type="button">Làm mới</button></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Tiêu đề</th><th>Loại</th><th>Trạng thái</th><th class="num">Số đoạn</th><th>Cập nhật</th><th></th></tr></thead>
+          <tbody id="doc-rows"></tbody>
+        </table></div>
+        <p class="msg" id="doc-msg" role="status"></p>
+      </div>
+      <div class="card">
+        <h2>Thử truy vấn Knowledge Base</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:-6px">Xem các đoạn tri thức RAG sẽ dùng cho một câu hỏi (kèm điểm tương đồng).</p>
+        <form id="search-form" class="row">
+          <div><label for="s-query">Câu hỏi</label><input id="s-query" type="text" required placeholder="Lệ phí thi bao nhiêu?"></div>
+          <div style="flex:none"><button class="btn primary" type="submit">Tìm</button></div>
+        </form>
+        <div id="search-results"></div>
+      </div>
+    </section>
+
+    <!-- ================= BÁO CÁO ================= -->
+    <section data-panel="reports" hidden>
+      <div class="card">
+        <form id="report-form" class="row">
+          <div><label for="r-period">Thống kê theo</label>
+            <select id="r-period"><option value="day">Ngày</option><option value="week">Tuần</option><option value="month">Tháng</option></select></div>
+          <div><label for="r-from">Từ ngày</label><input id="r-from" type="date"></div>
+          <div><label for="r-to">Đến ngày</label><input id="r-to" type="date"></div>
+          <div style="flex:none"><button class="btn primary" type="submit">Xem báo cáo</button></div>
+          <div style="flex:none"><button class="btn" type="button" id="export">Xuất Excel câu hỏi chưa trả lời / chuyển tư vấn viên</button></div>
+        </form>
+        <p class="msg" id="report-msg" role="status"></p>
+      </div>
+      <div class="tiles" id="tiles"></div>
+      <div class="card">
+        <h2>Số câu hỏi của thí sinh</h2>
+        <div class="chart" id="chart"></div>
+      </div>
+      <div class="card">
+        <h2>Kết quả xử lý theo kỳ</h2>
+        <div class="table-wrap"><table id="report-table"></table></div>
+      </div>
+      <div class="card">
+        <h2>Câu hỏi phổ biến</h2>
+        <div class="table-wrap"><table><thead><tr><th>Câu hỏi</th><th class="num">Số lần</th></tr></thead><tbody id="top-rows"></tbody></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var API = (new URLSearchParams(location.search).get("api") || location.origin).replace(/\/+$/, "");
+  var KEY_STORAGE = "pm-admin-key";
+  var state = { key: null, faqs: [] };
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(text) {
+    return String(text == null ? "" : text).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function api(path, options) {
+    options = options || {};
+    var headers = { "X-Admin-Key": state.key };
+    var body = options.form;
+    if (options.json) { headers["Content-Type"] = "application/json"; body = JSON.stringify(options.json); }
+    return fetch(API + path, { method: options.method || "GET", headers: headers, body: body })
+      .catch(function () { throw new Error("Không kết nối được máy chủ."); })
+      .then(function (response) {
+        if (options.raw && response.ok) return response;
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok) throw new Error(data.error || data.message || ("Lỗi " + response.status));
+          return data;
+        });
+      });
+  }
+
+  function say(id, text, ok) {
+    $(id).textContent = text;
+    $(id).className = "msg " + (ok ? "ok" : "error");
+  }
+
+  // ---- đăng nhập / tab ---------------------------------------------------------------
+  function login(key) {
+    state.key = key;
+    return api("/api/admin/faqs").then(function () {
+      sessionStorage.setItem(KEY_STORAGE, key);
+      $("login").hidden = true;
+      $("app").hidden = false;
+      loadFaqs();
+    }).catch(function (error) {
+      sessionStorage.removeItem(KEY_STORAGE);
+      $("login").hidden = false;
+      $("app").hidden = true;
+      $("login-error").hidden = false;
+      $("login-error").textContent = error.message;
+    });
+  }
+
+  $("login-form").addEventListener("submit", function (event) { event.preventDefault(); login($("admin-key").value.trim()); });
+  $("logout").addEventListener("click", function () { sessionStorage.removeItem(KEY_STORAGE); location.reload(); });
+
+  var loaders = { faq: loadFaqs, docs: loadDocs, reports: loadReport };
+  document.querySelectorAll("[data-tab]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var tab = button.getAttribute("data-tab");
+      document.querySelectorAll("[data-tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b === button)); });
+      document.querySelectorAll("[data-panel]").forEach(function (panel) { panel.hidden = panel.getAttribute("data-panel") !== tab; });
+      loaders[tab]();
+    });
+  });
+
+  // ---- FAQ -------------------------------------------------------------------------
+  function loadFaqs() {
+    return api("/api/admin/faqs").then(function (data) { state.faqs = data.faqs; renderFaqs(); })
+      .catch(function (error) { say("faq-msg", error.message); });
+  }
+
+  function renderFaqs() {
+    var query = $("faq-search").value.trim().toLowerCase();
+    var rows = state.faqs.filter(function (f) {
+      return !query || [f.nhom_nghiep_vu, f.intent, f.cau_hoi_mau, f.tra_loi_chuan].join(" ").toLowerCase().indexOf(query) !== -1;
+    });
+    $("faq-count").textContent = rows.length + " / " + state.faqs.length;
+    $("faq-rows").innerHTML = rows.map(function (f) {
+      return "<tr><td>" + f.id + "</td><td><small>" + escapeHtml(f.nhom_nghiep_vu || "") + "</small><br><strong>" +
+        escapeHtml(f.intent) + '</strong></td><td class="clip">' + escapeHtml(f.cau_hoi_mau) + '</td><td class="clip">' +
+        escapeHtml(f.tra_loi_chuan) + '</td><td style="white-space:nowrap"><button class="btn small" data-edit="' + f.id +
+        '">Sửa</button> <button class="btn small danger" data-hide="' + f.id + '">Ẩn</button></td></tr>';
+    }).join("") || '<tr><td colspan="5">Không có FAQ phù hợp.</td></tr>';
+  }
+
+  $("faq-search").addEventListener("input", renderFaqs);
+
+  function syncSummary(sync) {
+    return sync && sync.status !== "failed" ? " Knowledge Base đã cập nhật." :
+      " Lưu ý: " + ((sync && sync.message) || "chưa đồng bộ được Knowledge Base") + " (FAQ vẫn dùng được ngay).";
+  }
+
+  function resetFaqForm() {
+    $("faq-form").reset();
+    $("faq-form").elements.id.value = "";
+    $("faq-form-title").textContent = "Thêm FAQ mới";
+    $("faq-cancel").hidden = true;
+  }
+
+  $("faq-cancel").addEventListener("click", resetFaqForm);
+
+  $("faq-rows").addEventListener("click", function (event) {
+    var edit = event.target.getAttribute("data-edit");
+    var hide = event.target.getAttribute("data-hide");
+    if (edit) {
+      var faq = state.faqs.filter(function (f) { return String(f.id) === edit; })[0];
+      var form = $("faq-form").elements;
+      form.id.value = faq.id;
+      ["nhom_nghiep_vu", "intent", "cau_hoi_mau", "tra_loi_chuan"].forEach(function (name) { form[name].value = faq[name] || ""; });
+      $("faq-form-title").textContent = "Sửa FAQ #" + faq.id;
+      $("faq-cancel").hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (hide && confirm("Ẩn FAQ #" + hide + "? Chatbot sẽ không dùng FAQ này nữa.")) {
+      api("/api/admin/faqs/" + hide, { method: "DELETE" })
+        .then(function (data) { say("faq-msg", "Đã ẩn FAQ #" + hide + "." + syncSummary(data.knowledge_sync), true); loadFaqs(); })
+        .catch(function (error) { say("faq-msg", error.message); });
+    }
+  });
+
+  $("faq-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var form = $("faq-form").elements;
+    var payload = {};
+    ["nhom_nghiep_vu", "intent", "cau_hoi_mau", "tra_loi_chuan"].forEach(function (name) { payload[name] = form[name].value; });
+    var id = form.id.value;
+    $("faq-submit").disabled = true;
+    say("faq-msg", "Đang lưu và cập nhật Knowledge Base…", true);
+    api(id ? "/api/admin/faqs/" + id : "/api/admin/faqs", { method: id ? "PUT" : "POST", json: payload })
+      .then(function (data) {
+        say("faq-msg", (id ? "Đã cập nhật FAQ #" : "Đã thêm FAQ #") + data.faq.id + "." + syncSummary(data.knowledge_sync), true);
+        resetFaqForm();
+        loadFaqs();
+      })
+      .catch(function (error) { say("faq-msg", error.message); })
+      .then(function () { $("faq-submit").disabled = false; });
+  });
+
+  // ---- Tài liệu -----------------------------------------------------------------------
+  function loadDocs() {
+    return api("/api/knowledge?limit=200").then(function (data) {
+      $("doc-rows").innerHTML = data.documents.map(function (d) {
+        return "<tr><td>" + d.id + "</td><td>" + escapeHtml(d.title) + "<br><small>" + escapeHtml(d.original_filename || "") +
+          "</small></td><td>" + escapeHtml(d.source_type) + '</td><td><span class="pill ' + escapeHtml(d.status) + '">' +
+          escapeHtml(d.status) + "</span> " + (d.is_active ? '<span class="pill on">đang dùng</span>' : '<span class="pill">đã ẩn</span>') +
+          (d.error_message ? "<br><small>" + escapeHtml(d.error_message) + "</small>" : "") +
+          '</td><td class="num">' + d.chunk_count + "</td><td>" + escapeHtml(d.updated_at || d.created_at) +
+          '</td><td style="white-space:nowrap"><button class="btn small" data-toggle="' + d.id + '" data-active="' + d.is_active + '">' +
+          (d.is_active ? "Ẩn" : "Dùng lại") + '</button> <button class="btn small" data-reindex="' + d.id +
+          '">Xử lý lại</button> <button class="btn small danger" data-delete="' + d.id + '">Xoá</button></td></tr>';
+      }).join("") || '<tr><td colspan="7">Chưa có tài liệu.</td></tr>';
+    }).catch(function (error) { say("doc-msg", error.message); });
+  }
+
+  $("reload-docs").addEventListener("click", loadDocs);
+
+  $("sync-faq").addEventListener("click", function () {
+    say("doc-msg", "Đang đồng bộ FAQ…", true);
+    api("/api/knowledge/sync-faq", { method: "POST" })
+      .then(function (data) { say("doc-msg", data.message || "Đã đồng bộ.", true); loadDocs(); })
+      .catch(function (error) { say("doc-msg", error.message); });
+  });
+
+  $("doc-rows").addEventListener("click", function (event) {
+    var target = event.target;
+    var id = target.getAttribute("data-toggle") || target.getAttribute("data-reindex") || target.getAttribute("data-delete");
+    if (!id) return;
+    var request;
+    if (target.hasAttribute("data-toggle")) {
+      request = api("/api/knowledge/" + id, { method: "PATCH", json: { is_active: target.getAttribute("data-active") !== "true" } });
+    } else if (target.hasAttribute("data-reindex")) {
+      say("doc-msg", "Đang xử lý lại tài liệu #" + id + "…", true);
+      request = api("/api/knowledge/" + id + "/reindex", { method: "POST" });
+    } else {
+      if (!confirm("Xoá vĩnh viễn tài liệu #" + id + " khỏi Knowledge Base?")) return;
+      request = api("/api/knowledge/" + id, { method: "DELETE" });
+    }
+    request.then(function (data) { say("doc-msg", data.message || "Đã cập nhật tài liệu #" + id + ".", true); loadDocs(); })
+      .catch(function (error) { say("doc-msg", error.message); });
+  });
+
+  $("upload-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var form = new FormData($("upload-form"));
+    say("upload-msg", "Đang tải lên, tách đoạn và tạo embedding…", true);
+    api("/api/knowledge/upload", { method: "POST", form: form })
+      .then(function (data) {
+        say("upload-msg", data.message || ("Kết quả: " + data.result), data.result !== "duplicate");
+        $("upload-form").reset();
+        loadDocs();
+      })
+      .catch(function (error) { say("upload-msg", error.message); });
+  });
+
+  $("search-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    api("/api/knowledge/search", { method: "POST", json: { query: $("s-query").value, top_k: 5 } })
+      .then(function (data) {
+        $("search-results").innerHTML = data.results.map(function (r) {
+          return '<div class="search-result"><small>' + escapeHtml(r.citation) + " · điểm " + Number(r.score).toFixed(3) +
+            " · " + escapeHtml(r.retrieval_method) + "</small>" + escapeHtml(r.content) + "</div>";
+        }).join("") || '<p class="msg">Không tìm thấy đoạn nào.</p>';
+      })
+      .catch(function (error) { $("search-results").innerHTML = '<p class="msg error">' + escapeHtml(error.message) + "</p>"; });
+  });
+
+  // ---- Báo cáo -------------------------------------------------------------------------
+  function isoDate(date) { return date.toISOString().slice(0, 10); }
+  var today = new Date();
+  $("r-to").value = isoDate(today);
+  $("r-from").value = isoDate(new Date(today.getTime() - 29 * 86400000));
+
+  function reportQuery() {
+    return "from=" + $("r-from").value + "&to=" + $("r-to").value;
+  }
+
+  function loadReport() {
+    say("report-msg", "", true);
+    return api("/api/admin/reports/summary?period=" + $("r-period").value + "&" + reportQuery())
+      .then(renderReport)
+      .catch(function (error) { say("report-msg", error.message); });
+  }
+
+  $("report-form").addEventListener("submit", function (event) { event.preventDefault(); loadReport(); });
+
+  function renderReport(data) {
+    var outcomes = data.outcomes;
+    var totals = data.totals;
+    var tiles = [["Câu hỏi", totals.questions], ["AI + FAQ trả lời", totals.answered + totals.faq],
+                 ["Chưa trả lời được", totals.cannot_answer], ["Chuyển tư vấn viên", totals.handovers],
+                 ["Ngoài phạm vi / bị chặn", totals.out_of_scope + totals.blocked]];
+    $("tiles").innerHTML = tiles.map(function (t) {
+      return '<div class="tile"><span>' + t[0] + "</span><strong>" + t[1].toLocaleString("vi-VN") + "</strong></div>";
+    }).join("");
+
+    var active = data.series.filter(function (row) { return row.questions > 0; });
+    $("report-table").innerHTML = "<thead><tr><th>Kỳ</th><th class=num>Câu hỏi</th>" +
+      outcomes.map(function (o) { return "<th class=num>" + o.label + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      (active.map(function (row) {
+        return "<tr><td>" + escapeHtml(row.period) + "</td><td class=num>" + row.questions + "</td>" +
+          outcomes.map(function (o) { return "<td class=num>" + row[o.key] + "</td>"; }).join("") + "</tr>";
+      }).join("") || '<tr><td colspan="' + (outcomes.length + 2) + '">Chưa có dữ liệu trong khoảng thời gian này.</td></tr>') + "</tbody>";
+
+    $("top-rows").innerHTML = data.top_questions.map(function (q) {
+      return '<tr><td class="clip">' + escapeHtml(q.question) + '</td><td class="num">' + q.total + "</td></tr>";
+    }).join("") || '<tr><td colspan="2">Chưa có dữ liệu.</td></tr>';
+
+    renderChart(data.series, outcomes);
+  }
+
+  /** Biểu đồ cột 1 chuỗi (số câu hỏi/kỳ) bằng SVG thuần; rê chuột xem chi tiết kết quả xử lý. */
+  /** Bước chia trục Y là số nguyên "đẹp" (1, 2, 5 x 10^n) cho 4 khoảng. */
+  function niceStep(max) {
+    var raw = Math.max(1, max / 4), magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    var steps = [1, 2, 5, 10].map(function (m) { return m * magnitude; });
+    return steps.filter(function (s) { return s >= raw; })[0];
+  }
+
+  function renderChart(series, outcomes) {
+    var box = $("chart");
+    if (!series.length) { box.innerHTML = '<p class="msg">Chưa có dữ liệu để vẽ biểu đồ.</p>'; return; }
+    var width = 900, height = 260, left = 44, right = 12, top = 12, bottom = 34;
+    var max = Math.max.apply(null, series.map(function (s) { return s.questions; }).concat([1]));
+    var tick = niceStep(max);
+    var niceMax = Math.ceil(max / tick) * tick;
+    var ticks = niceMax / tick;
+    var plotW = width - left - right, plotH = height - top - bottom;
+    var slot = plotW / series.length, barW = Math.max(2, Math.min(36, slot * 0.6));
+    var y = function (v) { return top + plotH - (v / niceMax) * plotH; };
+    var svg = '<svg viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Số câu hỏi theo kỳ">';
+    for (var i = 0; i <= ticks; i++) {
+      var value = tick * i, yy = y(value);
+      svg += '<line class="grid" x1="' + left + '" x2="' + (width - right) + '" y1="' + yy + '" y2="' + yy + '"/>' +
+        '<text class="axis-label" x="' + (left - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + Math.round(value) + "</text>";
+    }
+    var labelEvery = Math.ceil(series.length / 12);
+    series.forEach(function (s, index) {
+      var x = left + slot * index + (slot - barW) / 2, h = Math.max(0, top + plotH - y(s.questions));
+      var r = Math.min(4, barW / 2, h);
+      // Cột bo tròn 4px ở đầu dữ liệu, đáy vuông bám trục.
+      svg += '<path class="bar" data-index="' + index + '" d="M' + x + "," + (top + plotH) + "V" + (top + plotH - h + r) +
+        "Q" + x + "," + (top + plotH - h) + " " + (x + r) + "," + (top + plotH - h) + "H" + (x + barW - r) +
+        "Q" + (x + barW) + "," + (top + plotH - h) + " " + (x + barW) + "," + (top + plotH - h + r) + "V" + (top + plotH) + 'Z"/>';
+      svg += '<rect class="hit" data-index="' + index + '" x="' + (left + slot * index) + '" y="' + top + '" width="' + slot + '" height="' + plotH + '"/>';
+      if (index % labelEvery === 0) {
+        svg += '<text class="axis-label" x="' + (x + barW / 2) + '" y="' + (height - 12) + '" text-anchor="middle">' + escapeHtml(s.period) + "</text>";
+      }
+    });
+    box.innerHTML = svg + '</svg><div class="tooltip" hidden></div>';
+
+    var tooltip = box.querySelector(".tooltip");
+    box.querySelector("svg").addEventListener("mousemove", function (event) {
+      var index = event.target.getAttribute("data-index");
+      box.querySelectorAll(".bar").forEach(function (bar) { bar.classList.toggle("hover", bar.getAttribute("data-index") === index); });
+      if (index === null) { tooltip.hidden = true; return; }
+      var s = series[+index];
+      tooltip.innerHTML = "<b>" + escapeHtml(s.period) + "</b><div><span>Câu hỏi</span><strong>" + s.questions + "</strong></div>" +
+        outcomes.map(function (o) { return "<div><span>" + o.label + "</span><span>" + s[o.key] + "</span></div>"; }).join("");
+      tooltip.hidden = false;
+      var rect = box.getBoundingClientRect();
+      var px = event.clientX - rect.left + 14, py = event.clientY - rect.top + 10;
+      tooltip.style.left = Math.min(px, rect.width - 190) + "px";
+      tooltip.style.top = py + "px";
+    });
+    box.querySelector("svg").addEventListener("mouseleave", function () {
+      tooltip.hidden = true;
+      box.querySelectorAll(".bar").forEach(function (bar) { bar.classList.remove("hover"); });
+    });
+  }
+
+  $("export").addEventListener("click", function () {
+    api("/api/admin/reports/unanswered.xlsx?" + reportQuery(), { raw: true })
+      .then(function (response) { return response.blob(); })
+      .then(function (blob) {
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "cau_hoi_chua_tra_loi_" + $("r-from").value + "_" + $("r-to").value + ".xlsx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        say("report-msg", "Đã xuất file Excel.", true);
+      })
+      .catch(function (error) { say("report-msg", error.message); });
+  });
+
+  var savedKey = sessionStorage.getItem(KEY_STORAGE);
+  if (savedKey) login(savedKey); else $("login").hidden = false;
+})();
+</script>
+</body>
+</html>

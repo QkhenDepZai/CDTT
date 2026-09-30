@@ -1,0 +1,52 @@
+# Danh mục TỪ KHOÁ CẤM / NHẠY CẢM (D1-07) - Quản trị nghiệp vụ tự sửa, không cần sửa code.
+# Mỗi dòng 1 từ/cụm từ; dòng bắt đầu bằng "#" là chú thích. Không phân biệt hoa/thường.
+# - Viết CÓ DẤU  -> chỉ khớp văn bản có dấu      (vd "đéo" không chặn nhầm "deo" = đeo).
+# - Viết KHÔNG DẤU (chỉ ký tự ASCII) -> khớp cả khi người dùng gõ không dấu.
+# Khớp theo nguyên từ/cụm từ: "sex" không khớp "sexy". Sửa xong: khởi động lại server.
+
+# --- Ngôn từ thô tục, xúc phạm ---
+địt
+đụ
+đéo
+lồn
+cặc
+buồi
+đĩ
+óc chó
+mẹ mày
+thằng ngu
+con ngu
+đồ ngu
+dcm
+dit me
+dit con me
+du ma
+dmm
+vcl
+vkl
+clgt
+fuck
+shit
+bitch
+
+# --- Bạo lực, tự hại, hành vi nguy hiểm ---
+giết người
+làm hại người khác
+tự tử
+tự sát
+chế tạo bom
+bom tự chế
+mua súng
+ma túy
+ma tuý
+thuốc phiện
+
+# --- Nội dung tình dục ---
+khiêu dâm
+sex
+porn
+
+# --- Gian lận, xâm nhập ---
+hack tài khoản
+đánh cắp mật khẩu
+mua đề thi

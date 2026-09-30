@@ -13,7 +13,7 @@
 --   1. Người dùng & kênh    : users, user_channel_identities, sites
 --   2. Phiên & lịch sử chat : conversations, messages, VIEW chat_history
 --   3. Knowledge Base (RAG) : faqs, knowledge_metadata, knowledge_chunks
---   4. Kiểm soát & handover : violation_logs, agent_notifications
+--   4. Kiểm soát & handover : violation_logs, agent_notifications, support_tickets
 -- =====================================================================
 
 CREATE DATABASE IF NOT EXISTS gemini_chat_db
@@ -261,6 +261,33 @@ CREATE TABLE IF NOT EXISTS agent_notifications (
     KEY idx_notif_unread (is_read, created_at),
     CONSTRAINT fk_agent_notifications_conversations FOREIGN KEY (conversation_id)
         REFERENCES conversations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- 4b. SUPPORT_TICKETS: thí sinh để lại thông tin khi yêu cầu gặp tư vấn
+--     viên NGOÀI GIỜ TRỰC (D1-09, TC-HANDOVER-08/09). Chỉ lưu tên/email/SĐT
+--     khi thí sinh tích "đồng ý" trên form (URD mục 5).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    conversation_id  INT          NOT NULL,
+    user_id          INT          NULL,
+    full_name        VARCHAR(100) NOT NULL,
+    email            VARCHAR(255) NULL,
+    phone            VARCHAR(20)  NULL,
+    content          TEXT         NOT NULL,
+    status           ENUM('open', 'in_progress', 'resolved') NOT NULL DEFAULT 'open',
+    handled_by       INT          NULL,
+    created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                  ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_ticket_status (status, created_at),
+    CONSTRAINT fk_ticket_conversations FOREIGN KEY (conversation_id)
+        REFERENCES conversations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ticket_users FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_ticket_staff FOREIGN KEY (handled_by)
+        REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------

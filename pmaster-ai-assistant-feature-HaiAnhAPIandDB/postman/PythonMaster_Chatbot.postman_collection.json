@@ -1812,6 +1812,504 @@
           ]
         }
       ]
+    },
+    {
+      "name": "6. Widget, ngoài giờ & Quản trị",
+      "description": "API bổ sung cho widget.js, Staff Dashboard (/staff) và trang quản trị (/admin). Chạy '1. Chat' → Khởi tạo phiên trước để có userId/userToken/conversationId.",
+      "item": [
+        {
+          "name": "Lấy tin nhắn của phiên (widget polling)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Site-Key",
+                "value": "{{siteKey}}"
+              },
+              {
+                "key": "X-User-Token",
+                "value": "{{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/conversations/{{conversationId}}/messages?user_id={{userId}}&after_id=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "conversations",
+                "{{conversationId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "after_id",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Widget dùng để khôi phục phiên và nhận tin tư vấn viên. BẮT BUỘC X-User-Token khớp user_id (thiếu/sai -> 403)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Có conversation.status', () => pm.expect(pm.response.json().conversation.status).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Để lại thông tin hỗ trợ (ticket ngoài giờ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Site-Key",
+                "value": "{{siteKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/tickets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "tickets"
+              ]
+            },
+            "description": "TC-HANDOVER-09. Bắt buộc consent=true, họ tên, email hoặc SĐT, nội dung. Thiếu consent -> 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site_key\": \"{{siteKey}}\",\n  \"user_id\": \"{{userId}}\",\n  \"conversation_id\": \"{{conversationId}}\",\n  \"full_name\": \"Nguyễn Văn Test\",\n  \"email\": \"test@example.com\",\n  \"phone\": \"0912345678\",\n  \"content\": \"Em cần hỗ trợ đổi bảng thi\",\n  \"consent\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ticketId', pm.response.json().ticket_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff: phiên đang do tôi xử lý",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/conversations?scope=mine",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "staff",
+                "conversations"
+              ],
+              "query": [
+                {
+                  "key": "scope",
+                  "value": "mine"
+                }
+              ]
+            },
+            "description": "scope = waiting | mine | open."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff: danh sách ticket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/tickets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "staff",
+                "tickets"
+              ]
+            },
+            "description": "Lọc status = open | in_progress | resolved (bỏ trống = tất cả)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff: cập nhật trạng thái ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Staff-Id",
+                "value": "{{staffId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/tickets/{{ticketId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "staff",
+                "tickets",
+                "{{ticketId}}",
+                "status"
+              ]
+            },
+            "description": "status = open | in_progress | resolved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: danh sách FAQ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/faqs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "faqs"
+              ]
+            },
+            "description": "include_inactive=true để xem cả FAQ đã ẩn."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: thêm FAQ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/faqs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "faqs"
+              ]
+            },
+            "description": "TC-RAG-05. Lưu xong tự đồng bộ sang Knowledge Base (knowledge_sync).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nhom_nghiep_vu\": \"Thông tin kỳ thi\",\n  \"intent\": \"FAQ kiểm thử\",\n  \"cau_hoi_mau\": \"- Câu hỏi kiểm thử?\",\n  \"tra_loi_chuan\": \"Câu trả lời kiểm thử.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('adminFaqId', pm.response.json().faq.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: sửa FAQ",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/faqs/{{adminFaqId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "faqs",
+                "{{adminFaqId}}"
+              ]
+            },
+            "description": "TC-RAG-06. Chỉ gửi các trường cần sửa.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tra_loi_chuan\": \"Câu trả lời kiểm thử đã cập nhật.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: ẩn FAQ",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/faqs/{{adminFaqId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "faqs",
+                "{{adminFaqId}}"
+              ]
+            },
+            "description": "Đặt is_active = 0 (giữ lịch sử), đồng bộ lại Knowledge Base."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: báo cáo thống kê",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/summary?period=day&from=&to=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "reports",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "day"
+                },
+                {
+                  "key": "from",
+                  "value": ""
+                },
+                {
+                  "key": "to",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "TC-RP-01/02. period = day | week | month; from/to dạng YYYY-MM-DD (mặc định 30 ngày gần nhất)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: xuất Excel câu hỏi chưa trả lời / chuyển tư vấn viên",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/unanswered.xlsx?from=&to=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "reports",
+                "unanswered.xlsx"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": ""
+                },
+                {
+                  "key": "to",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "TC-RP-03/04. Trong Postman chọn Send and Download để lưu file."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1861,6 +2359,14 @@
     },
     {
       "key": "eventTs",
+      "value": ""
+    },
+    {
+      "key": "ticketId",
+      "value": ""
+    },
+    {
+      "key": "adminFaqId",
       "value": ""
     }
   ]
